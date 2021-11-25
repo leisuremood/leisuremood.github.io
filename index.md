@@ -1,7 +1,20 @@
-Hello and welcome to this blog. Edit the `index.md` file to change this content. All pages on the blog, including this one, use [Markdown](https://guides.github.com/features/mastering-markdown/). You can include images:
+<dl>
+<dt>
+  
+> 劝僧一杯酒，共看青青山。
+> 
+> 酣然万象灭，不动心印闲。
+
+</dt>
+
+<dd>  ---- 《劝僧酒》唐代 皇甫松  </dd>
+</dl>
+
+
+
 
 ![Image of fast.ai logo](images/logo.png)
 
-## This is a title
+## 不动闲心 の blog
 
-And you can include links, like this [link to fast.ai](https://www.fast.ai). Posts will appear after this file. 
+王阳明曰：心若不动，万事从容。无论做任何事情，心都不要随波逐流，不要随境而动。这也正符合了佛法：不必妄想，不必忧苦，安住于心，活在当下。
