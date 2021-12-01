@@ -6,7 +6,7 @@ tags:
       - 随笔
 ---
 
-#elisp函数中的quote
+# elisp函数中的quote
 
 
 (defun dummy() 

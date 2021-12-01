@@ -6,7 +6,7 @@ tags:
       - 随笔
 ---
 
-#给Git或者APT设置goagent代理
+# 给Git或者APT设置goagent代理
 
 
 > 最近使用git从github上clone代码，总是失败，奔溃了快。还有ubuntu连apt-get

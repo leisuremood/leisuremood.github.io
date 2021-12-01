@@ -6,7 +6,7 @@ tags:
       - 随笔
 ---
 
-#lisp谓词eq,eql,equal
+# lisp谓词eq,eql,equal
 
 
 真正严谨的是 Common Lisp，CL 里有三种通用的等价谓词：eq, eql, equal

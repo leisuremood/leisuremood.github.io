@@ -6,7 +6,7 @@ tags:
       - 随笔
 ---
 
-#ld链接器脚本内的locationcounter
+# ld链接器脚本内的locationcounter
 
 
 https://www.newsmth.net/nForum/#!article/KernelTech/74604

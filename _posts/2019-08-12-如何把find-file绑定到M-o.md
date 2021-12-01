@@ -6,7 +6,7 @@ tags:
       - 随笔
 ---
 
-#如何把find-file绑定到M-o
+# 如何把find-file绑定到M-o
 
 
 [一些有用的 Emacs

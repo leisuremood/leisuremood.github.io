@@ -6,7 +6,7 @@ tags:
       - 随笔
 ---
 
-#从std::cout和endl说起
+# 从std::cout和endl说起
 
 
 https://www.cnblogs.com/lihaozy/archive/2012/05/09/2491791.html

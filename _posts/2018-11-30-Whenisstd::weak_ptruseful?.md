@@ -6,7 +6,7 @@ tags:
       - 随笔
 ---
 
-#Whenisstd::weak_ptruseful?
+# Whenisstd::weak_ptruseful?
 
 
 use_countrefer: [When is std::weak_ptr

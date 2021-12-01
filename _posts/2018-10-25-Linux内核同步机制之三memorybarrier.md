@@ -6,7 +6,7 @@ tags:
       - 随笔
 ---
 
-#Linux内核同步机制之三memorybarrier
+# Linux内核同步机制之三memorybarrier
 
 
 https://www.wowotech.net/kernel_synchronization/memory-barrier.html
