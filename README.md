@@ -1,3 +1,3 @@
-# Your blog
+# 不动闲心 の blog
 
-This is the repository for your blog! Click *_config.yml* above to get started and fill in the details. Then click *index.md* and edit it to start creating your home page.
+佛学，中医，计算机。
