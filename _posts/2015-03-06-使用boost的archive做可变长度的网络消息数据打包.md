@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# 使用boost的archive做可变长度的网络消息数据打包
-
 
 **https://blog.csdn.net/gddsky/article/details/5021388
 **

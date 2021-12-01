@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# C++14的returntypededuction&
-
 
 https://www.newsmth.net/nForum/#!article/CPlusPlus/374960
 

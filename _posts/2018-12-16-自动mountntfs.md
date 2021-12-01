@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# 自动mountntfs
-
 
 /etc/fstab
 

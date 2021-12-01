@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# gnome-termilalfont
-
 
 cp /mnt/d/Windows/Fonts/simsun.ttf  \~/.fonts
 

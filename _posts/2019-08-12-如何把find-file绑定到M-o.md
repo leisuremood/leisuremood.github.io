@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# 如何把find-file绑定到M-o
-
 
 [一些有用的 Emacs
 配置（窗口快速切换、一键透明效果、任意位置删除整行等）](https://www.cnblogs.com/yjie/p/4059145.html)   

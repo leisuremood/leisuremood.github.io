@@ -1,4 +1,8 @@
-# About
+---
+layout: page
+title: About
+---
 
-This is where you put the contents of your *About* page. Like all your pages, it's in [Markdown](https://guides.github.com/features/mastering-markdown/) format.
+**Not Pure Poole** is a simple, beautiful, and powerful Jekyll theme for blogs. It is built on [Poole](https://github.com/poole/poole) and [Pure](https://purecss.io/).
 
+For more information about Not Pure Poole, please browse the [README](https://github.com/vszhub/not-pure-poole) file.

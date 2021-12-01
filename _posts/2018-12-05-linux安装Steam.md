@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# linux安装Steam
-
 
 <https://negativo17.org/steam/>
 

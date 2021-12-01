@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# python3的lxml
-
 
 [lxml 学习笔记](https://www.jb51.net/article/142670.htm)
 

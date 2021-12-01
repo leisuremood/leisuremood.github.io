@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# chrome的tampermonkey
-
 
 <https://sspai.com/post/40485>
 

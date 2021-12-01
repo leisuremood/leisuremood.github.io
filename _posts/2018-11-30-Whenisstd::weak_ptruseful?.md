@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# Whenisstd::weak_ptruseful?
-
 
 use_countrefer: [When is std::weak_ptr
 useful?](https://stackoverflow.com/questions/12030650/when-is-stdweak-ptr-useful)

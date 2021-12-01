@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# emacsggtagsglobal
-
 
 [Mac上emacs使用ggtags](https://blog.csdn.net/u010164190/article/details/79520054)
 

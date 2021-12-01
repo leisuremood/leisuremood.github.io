@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# Linux中的memorybarrier
-
 
 https://blog.csdn.net/phenix_lord/article/details/50545364
 

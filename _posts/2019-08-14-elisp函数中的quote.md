@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# elisp函数中的quote
-
 
 (defun dummy() 
    (list \'(\"first\" . 1) 

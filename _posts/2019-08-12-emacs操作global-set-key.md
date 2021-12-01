@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# emacs操作global-set-key
-
 
 [Key Bind
 Commands](https://www.masteringemacs.org/article/mastering-key-bindings-emacs)

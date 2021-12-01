@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# smbclient
-
 
 win7下先share目录ISO
 

@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# helm合use-package合projectile
-
 
 [暴增 Emacs 生产力的十大最佳插件](https://www.imooc.com/article/251525)
 

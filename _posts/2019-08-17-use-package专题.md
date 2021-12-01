@@ -6,8 +6,6 @@ tags:
       - 随笔
 ---
 
-# use-package专题
-
 
 [package的引入和管理](https://longlycode.github.io/post/emacs%E5%AE%8C%E5%85%A8%E8%A1%A5%E5%AE%8C%E8%AE%A1%E5%88%92-%E4%B8%89/)
 
