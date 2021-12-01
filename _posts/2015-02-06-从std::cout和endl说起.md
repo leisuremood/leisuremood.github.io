@@ -1,14 +1,17 @@
 ---
 layout: post
-title:  从std::cout和endl说起
+title:  "从std::cout和endl说起"
 date:   2015-02-06
 tags:
       - 随笔
 ---
-::: txtcont
-https://www.cnblogs.com/lihaozy/archive/2012/05/09/2491791.html\
-https://blog.csdn.net/hityct1/article/details/4082832\
-\
+
+#从std::cout和endl说起
+
+
+https://www.cnblogs.com/lihaozy/archive/2012/05/09/2491791.html
+https://blog.csdn.net/hityct1/article/details/4082832
+
 
 ## 正文
 
@@ -16,14 +19,14 @@ https://blog.csdn.net/hityct1/article/details/4082832\
 
 相信下面这个程序凡是会写C++程序的同仁都认得，估计学会的第一个C++程序就是它了吧：
 
-\
+
 //\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\--
 //        水之真谛 // https://blog.csdn.net/FantasiaX
 //\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\--
 #include int main(int argc, char \*argv\[\]) {          std::cout \<\<
 \"Hello, World.\" \<\<
 std::[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl");
-         return 0; }\
+         return 0; }
         
 
         
@@ -35,7 +38,7 @@ Studio弹出的代码自动完成窗口中发现，[endl](https://soft.zdnet.com
  
 
         
-因为问题是出在了[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")上，所以一直在查[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")的定义------结果除了发现MSDN里有个Bug之外，一无所获L\
+因为问题是出在了[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")上，所以一直在查[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")的定义------结果除了发现MSDN里有个Bug之外，一无所获L
 
 **MSDN里是这样声名的：**
 
@@ -43,7 +46,7 @@ template class\<\_Elem, \_Tr> basic_ostream\<\_Elem, \_Tr>&
 [endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")(
 basic_ostream\<\_Elem, \_Tr>& \_Ostr );
 
-红色标记的地方写错了:p\
+红色标记的地方写错了:p
 
 **C++ ISO文档里是这样声名的：**
 
@@ -51,11 +54,11 @@ template basic_ostream&
 [endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")(basic_ostream&
 os);
 
-按MSDN里模板的"写法"根本编译不过去，呵呵。\
+按MSDN里模板的"写法"根本编译不过去，呵呵。
 
          不过，MSDN里的说明还是非常有用的------Terminates a line and
 flushes the buffer.
-可是函数的功能是"结束一行并冲洗缓冲区"，如果想执行这个功能，应该是调用这个函数、应该写[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")()而不是[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")啊......看来问题又绕回去了。于是这事儿就放下了。\
+可是函数的功能是"结束一行并冲洗缓冲区"，如果想执行这个功能，应该是调用这个函数、应该写[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")()而不是[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")啊......看来问题又绕回去了。于是这事儿就放下了。
 
         
 今天遇到高手Sidney，又问起了这个问题。Sidney是研究过这个问题的，虽然没有给出我答案，但他提到这么一句话------"\<\<"操作符是被重载过的，可以接收一个函数作为参数。正好前几天我在写《深入浅出话回调》的时候写过类似的程序，经Sidney一点拨，顿时感觉豁然开朗。很快问题的答案就找到了------
@@ -72,7 +75,7 @@ flushes the buffer.
 7.  7.         其中的一个卸载形式是------ basic_ostream& operator \<\< (
     basic_ostream& (\*\_Pfn)(basic_ostream&) );
     说明cout的\<\<操作符可以接受一个函数指针（函数的地址）作为参数。
-    这个重载正好与[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")函数的声名相匹配，所以\<\<后面是可以跟着[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")的，也就是说，cout对象的\<\<操作符接受到[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")函数的地址后会在后台调用[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")函数，而[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")函数会结束当前行并冲洗buffer。\
+    这个重载正好与[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")函数的声名相匹配，所以\<\<后面是可以跟着[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")的，也就是说，cout对象的\<\<操作符接受到[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")函数的地址后会在后台调用[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")函数，而[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")函数会结束当前行并冲洗buffer。
 
 最后啰嗦一句------你可能会问：不是函数指针吗？为什么不写"std::cout\<\<&[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")"而写"std::cout\<\<[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")"呢？实际上，函数名本身就代表的是函数的地址，&[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")与[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl")的值是一样的J
 
@@ -86,9 +89,9 @@ flushes the buffer.
 &std::[endl](https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm "endl");
          return 0; }
 
-\
 
-\
+
+
 
 myend函数就是模拟endl函数的。它是个全局函数。为了达到与endl一样的用法，还定义了：
 
@@ -165,6 +168,6 @@ plain](https://blog.csdn.net/hityct1/article/details/4082832# "view plain")[copy
 
  
 
-\
-\
-:::
+
+
+

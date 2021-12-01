@@ -1,12 +1,15 @@
 ---
 layout: post
-title:  chrome的tampermonkey
+title:  "chrome的tampermonkey"
 date:   2018-12-06
 tags:
       - 随笔
 ---
-::: txtcont
-<https://sspai.com/post/40485>\
+
+#chrome的tampermonkey
+
+
+<https://sspai.com/post/40485>
 
 用 Chrome 的人都需要知道的「神器」扩展：「油猴」使用详解
 
@@ -86,7 +89,7 @@ Tampermonkey
     Mirror](https://userscripts-mirror.org/)：这两个网站都没有提供中文界面，Userscripts
     Mirror 已经停止了更新，用户可以在这个站点找到历史资源。
 
-找到需要的脚本后，会在介绍页面看到安装（install）按钮，点击下载脚本后会自动跳转到安装界面，再点击安装就可以享用脚本了。\
+找到需要的脚本后，会在介绍页面看到安装（install）按钮，点击下载脚本后会自动跳转到安装界面，再点击安装就可以享用脚本了。
 
 比如，在 OpenUserJS 的 Yet Another Weibo Filter 脚本页面，点击右侧
 Install 之后会跳转到 Tampermonkey
@@ -234,9 +237,9 @@ VIP 视频限制之类的脚本。这些在 Greasy Fork 和 OpenUserJS
 [用 Chrome 怎么能不装扩展？少数派以往推荐的好用的 Chrome
 插件都在这里了 👉](https://sspai.com/topic/102)
 
-\
 
-1.  \
 
-\
-:::
+1.  
+
+
+

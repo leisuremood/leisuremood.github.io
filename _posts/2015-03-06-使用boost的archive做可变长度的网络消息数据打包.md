@@ -1,15 +1,18 @@
 ---
 layout: post
-title:  使用boost的archive做可变长度的网络消息数据打包
+title:  "使用boost的archive做可变长度的网络消息数据打包"
 date:   2015-03-06
 tags:
       - 随笔
 ---
-::: txtcont
-**https://blog.csdn.net/gddsky/article/details/5021388\
+
+#使用boost的archive做可变长度的网络消息数据打包
+
+
+**https://blog.csdn.net/gddsky/article/details/5021388
 **
 
-**\
+**
 **
 
 **目的**
@@ -477,6 +480,6 @@ plain](https://blog.csdn.net/gddsky/article/details/5021388# "view plain")[copy]
 247. **  **
 248. **  **
 249. **  **
-250. ** \
+250. ** 
      **
-:::
+

@@ -1,11 +1,14 @@
 ---
 layout: post
-title:  给Git或者APT设置goagent代理
+title:  "给Git或者APT设置goagent代理"
 date:   2015-01-28
 tags:
       - 随笔
 ---
-::: txtcont
+
+#给Git或者APT设置goagent代理
+
+
 > 最近使用git从github上clone代码，总是失败，奔溃了快。还有ubuntu连apt-get
 > update都执行不了，有的时候都装不了git，就快骂娘了。可惜在这样一个环境下，只能靠自己搞定了，设置代理是比较好的方式
 
@@ -34,4 +37,4 @@ clone就是走代理了，其实这个设置完以后apt-get的操作也是通�
 
 1.  sudo apt-get-o Acquire::http::proxy=\"https://127.0.0.1:8087/\"
     update
-:::
+

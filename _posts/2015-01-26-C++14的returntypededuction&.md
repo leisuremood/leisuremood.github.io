@@ -1,12 +1,15 @@
 ---
 layout: post
-title:  C++14的returntypededuction&
+title:  "C++14的returntypededuction&"
 date:   2015-01-26
 tags:
       - 随笔
 ---
-::: txtcont
-https://www.newsmth.net/nForum/#!article/CPlusPlus/374960\
+
+#C++14的returntypededuction&
+
+
+https://www.newsmth.net/nForum/#!article/CPlusPlus/374960
 
 若干年前实现了一个 C++
 序列化库，以前一直纠结于一种优化无法（自动）实现： 
@@ -45,5 +48,5 @@ memcpy，无法推断出 C 也可以 memcpy，当然，任何情况下 D 肯定�
 
   
 
-\
-:::
+
+

@@ -1,11 +1,14 @@
 ---
 layout: post
-title:  Whenisstd::weak_ptruseful?
+title:  "Whenisstd::weak_ptruseful?"
 date:   2018-11-30
 tags:
       - 随笔
 ---
-::: txtcont
+
+#Whenisstd::weak_ptruseful?
+
+
 use_countrefer: [When is std::weak_ptr
 useful?](https://stackoverflow.com/questions/12030650/when-is-stdweak-ptr-useful)
 
@@ -16,7 +19,7 @@ pointer](https://en.wikipedia.org/wiki/Dangling_pointer) problem. By
 just using raw pointers it is impossible to know if the referenced data
 has been deallocated or not. Instead, by letting a std::shared_ptr
 manage the data, and supplying std::weak_ptr to users of the data, the
-users can check validity of the data by calling expired() or lock().\
+users can check validity of the data by calling expired() or lock().
 
 应用场景：
 
@@ -59,7 +62,7 @@ freed since we stored weak_ptr
 
 } else {  // do stuff
 
-}// tempParentSharedPtr is released when it goes out of scope\
+}// tempParentSharedPtr is released when it goes out of scope
 
 -   管理进程std::shared_ptr\<Task>给subtask周期分配任务，std::vector\<std::weak_ptr\<Task>\>。用timer查看std::weak_ptr\<Task>是否还存在。Suppose
     you have a collection of tasks, executed asynchronously, and managed
@@ -71,5 +74,5 @@ freed since we stored weak_ptr
     whether the task is still alive by making a shared pointer from the
     weak pointer and using that shared pointer, provided it isn\'t null.
 
-\
-:::
+
+
