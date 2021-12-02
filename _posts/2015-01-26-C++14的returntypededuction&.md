@@ -3,7 +3,7 @@ layout: post
 title:  "C++14的returntypededuction&"
 date:   2015-01-26
 tags:
-      - 随笔
+      - it
 ---
 
 

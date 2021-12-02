@@ -3,7 +3,7 @@ layout: post
 title:  "Linux内核同步机制之三memorybarrier"
 date:   2018-10-25
 tags:
-      - 中医
+      - it
 ---
 
 

@@ -3,7 +3,7 @@ layout: post
 title:  "Git代理设置与访问Github"
 date:   2015-01-29
 tags:
-      - 中医
+      - it
 ---
 
 

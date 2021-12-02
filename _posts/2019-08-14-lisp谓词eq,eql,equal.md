@@ -3,7 +3,7 @@ layout: post
 title:  "lisp谓词eq,eql,equal"
 date:   2019-08-14
 tags:
-      - 中医
+      - it
 ---
 
 
