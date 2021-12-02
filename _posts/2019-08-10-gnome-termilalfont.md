@@ -3,7 +3,7 @@ layout: post
 title:  "gnome-termilalfont"
 date:   2019-08-10
 tags:
-      - 随笔
+      - it
 ---
 
 
