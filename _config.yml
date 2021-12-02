@@ -1,11 +1,11 @@
 # Setup
-title: Not Pure Poole
-description: A simple, beautiful, and powerful Jekyll theme for blogs
+title: 不动闲心 の blog
+description: 劝僧一杯酒，共看青青山。酣然万象灭，不动心印闲。
 url: https://vszhub.github.io
 avatar: /avatar.jpeg
 paginate: 5
 permalink: pretty
-cover_image: /bg.jpeg
+# cover_image: /bg.jpeg
 
 # Gems
 plugins:
