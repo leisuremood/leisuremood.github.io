@@ -3,7 +3,7 @@ layout: post
 title:  "Linux中的memorybarrier"
 date:   2018-10-25
 tags:
-      - 随笔
+      - it
 ---
 
 

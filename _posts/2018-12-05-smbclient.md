@@ -3,7 +3,7 @@ layout: post
 title:  "smbclient"
 date:   2018-12-05
 tags:
-      - 随笔
+      - it
 ---
 
 

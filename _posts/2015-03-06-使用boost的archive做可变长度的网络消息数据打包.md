@@ -3,7 +3,7 @@ layout: post
 title:  "使用boost的archive做可变长度的网络消息数据打包"
 date:   2015-03-06
 tags:
-      - 随笔
+      - 中医
 ---
 
 

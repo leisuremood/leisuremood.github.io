@@ -3,7 +3,7 @@ layout: post
 title:  "helm合use-package合projectile"
 date:   2019-08-12
 tags:
-      - 随笔
+      - it
 ---
 
 

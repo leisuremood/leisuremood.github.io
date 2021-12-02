@@ -3,7 +3,7 @@ layout: post
 title:  "读取url让firefox打开"
 date:   2020-03-11
 tags:
-      - 随笔
+      - it
 ---
 
 

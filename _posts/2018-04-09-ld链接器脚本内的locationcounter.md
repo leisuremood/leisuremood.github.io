@@ -3,7 +3,7 @@ layout: post
 title:  "ld链接器脚本内的locationcounter"
 date:   2018-04-09
 tags:
-      - 随笔
+      - it
 ---
 
 

@@ -3,7 +3,7 @@ layout: post
 title:  "elisp函数中的quote"
 date:   2019-08-14
 tags:
-      - 随笔
+      - it
 ---
 
 

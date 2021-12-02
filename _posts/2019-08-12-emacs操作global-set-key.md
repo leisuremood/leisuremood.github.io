@@ -3,7 +3,7 @@ layout: post
 title:  "emacs操作global-set-key"
 date:   2019-08-12
 tags:
-      - 随笔
+      - it
 ---
 
 

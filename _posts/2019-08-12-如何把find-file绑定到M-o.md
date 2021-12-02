@@ -3,7 +3,7 @@ layout: post
 title:  "如何把find-file绑定到M-o"
 date:   2019-08-12
 tags:
-      - 随笔
+      - it
 ---
 
 

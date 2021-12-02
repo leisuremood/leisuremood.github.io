@@ -3,7 +3,7 @@ layout: post
 title:  "给Git或者APT设置goagent代理"
 date:   2015-01-28
 tags:
-      - 随笔
+      - it
 ---
 
 

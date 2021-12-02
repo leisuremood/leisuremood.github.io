@@ -3,7 +3,7 @@ layout: post
 title:  "从std::cout和endl说起"
 date:   2015-02-06
 tags:
-      - 随笔
+      - 中医
 ---
 
 

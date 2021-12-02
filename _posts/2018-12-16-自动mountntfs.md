@@ -3,7 +3,7 @@ layout: post
 title:  "自动mountntfs"
 date:   2018-12-16
 tags:
-      - 随笔
+      - it
 ---
 
 
