@@ -21,3 +21,8 @@ http://cn.voidcc.com/question/p-vvrdqcpc-na.html
      ((list_member (car L) (cdr L)) (rem_dup (cdr L))) ; Skip duplicate element
      (T (cons (car L) (rem_dup (cdr L)))))) ; else include it, and check rest of list recursively
 ~~~
+
+emacs 里面可以
+
+(print before-save-hook )  
+(delete 'delete-trailing-whitespace before-save-hook )  
