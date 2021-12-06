@@ -13,19 +13,33 @@
     <a href="{{ "/" | relative_url }}" title="Home">{{ site.title }}</a>
   </div>
   <div class="masthead-tagline">
-    <small>{{ site.description }}</small>
+      <small>{{ site.description }}</small>
   </div>
+
+  {% if site.data.archive %}
+  <nav class="navigation">
+      <ul class="navigation-list">
+	  {% for item in site.data.archive %}
+	  <li class="navigation-item">
+              <a href="{{ item.url | relative_url }}" {% if page.url == item.url %}current-item{% endif %}"">{{ item.title }}</a>
+	  </li>
+	  {% endfor %}
+      </ul>
+  </nav>
+  {% endif %}
+
   {%- if site.data.navigation -%}
   <nav class="navigation">
-    <ul class="navigation-list">
-    {%- for nav in site.data.navigation -%}
-      <li class="navigation-item">
-        <a onclick="sessionStorage.setItem('forceCheckScroll', 'true')" href="{{ nav.url | relative_url }}">{{ nav.title | escape }}</a>
-      </li>
-    {%- endfor -%}
-    </ul>
+      <ul class="navigation-list">
+	  {%- for nav in site.data.navigation -%}
+	  <li class="navigation-item">
+	      <a onclick="sessionStorage.setItem('forceCheckScroll', 'true')" href="{{ nav.url | relative_url }}">{{ nav.title | escape }}</a>
+	  </li>
+	  {%- endfor -%}
+      </ul>
   </nav>
   {%- endif -%}
+  
   {% if site.data.social -%}
     <div class="social pure-menu pure-menu-horizontal">
       <ul class="social-icons pure-menu-list">
