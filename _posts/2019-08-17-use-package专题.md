@@ -3,7 +3,7 @@ layout: post
 title:  "use-package专题"
 date:   2019-08-17
 tags:
-      - it
+- it
 ---
 
 [package的引入和管理](https://longlycode.github.io/post/emacs%E5%AE%8C%E5%85%A8%E8%A1%A5%E5%AE%8C%E8%AE%A1%E5%88%92-%E4%B8%89/)
@@ -12,7 +12,9 @@ Auto-loading 可以向emacs中注册一个函数，只有当调用或者使用�
 
 (autoload'some-function"some-file")
 
-当调用some-function 时，加载some-file.el，再执行这个函数。autoload完整参数：(autoload FUNCTION FILE &optional DOCSTRING INTERACTIVE TYPE)，可以看出它除了提供加载文件地址外，还可以编写说明文档，在不加载文件时也能够查看它的用法。autoload这种方法可以写入的到emacs配置文件里面，但明显不好管理，为什么不在函数定义处就指明它是一个autoload形式的函数呢？事实上可以用所谓的"魔术"注释来装饰一个函数的开头，让它autoload。
+当调用some-function 时，加载some-file.el，再执行这个函数。autoload完整参数：  
+(autoload FUNCTION FILE &optional DOCSTRING INTERACTIVE TYPE)，  
+可以看出它除了提供加载文件地址外，还可以编写说明文档，在不加载文件时也能够查看它的用法。autoload这种方法可以写入的到emacs配置文件里面，但明显不好管理，为什么不在函数定义处就指明它是一个autoload形式的函数呢？事实上可以用所谓的"魔术"注释来装饰一个函数的开头，让它autoload。
 ~~~ elisp
 ;;;###autoload
 (defun my-function ()
