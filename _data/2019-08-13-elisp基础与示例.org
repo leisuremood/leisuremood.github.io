@@ -522,8 +522,8 @@ change_end
 
 #+begin_src elisp
   (defun read-file-as-lines(file-path)
-    (with-temp-buffer    (insert-file-contents file-path)
-			 (split-string (buffer-string) "\n" t)))
+    (with-temp-buffer (insert-file-contents file-path)
+		      (split-string (buffer-string) "\n" t)))
 
   (read-file-as-lines "./1.txt") > #'urls  ;; 把结果给变量urls。
 #+end_src
