@@ -1,0 +1,632 @@
+#+OPTIONS: toc:t
+* lisp基础知识
+** lisp求值
+求值是 lisp 解释器的核心，理解了求值过程也就学会了 lisp 编程的一半。一个symbol可以同时指代变量和函数，就是说一个foo，即是变量，又是 函数，在lisp里面是合法的。
+
+  #+begin_src elisp
+    (defun foo (x) (* x x))
+    (setq foo 5)
+    (foo foo)
+  #+end_src
+
+  #+RESULTS:
+  : 25
+
+一个要求值的 lisp对象被称为表达式（form）。所有的表达式可以分为三种： 符号、列表和其它类型（废话）。
+
+1. 自求值表达式。前面说过数字、字符串、向量都是自求值表达式。还有两个特殊的符号\\
+   t 和 nil\\
+   也可以看成是自求值表达式。最特别的是，()求值返回nil，因为()和 nil根本就是一回事情。
+
+2. 符号的求值结果就是符号的值。如果它没有值，就会出现void-variable 的错误。
+
+3. 列表表达式。而列表表达式又可以根据第一个元素分为函数调用 、宏调用和特殊表达式（special form）三种。列表的第一个表达式如果是一个 符号，解释器会查找这个表达式的*函数值*。如果函数值是另一个符号，则会继续  查找这个符号的函数值。这称为”symbol function indirection”。最后直到某  个符号的函数值是一个 lisp 函数（lambda 表达式）、byte-code 函数、原子函数（primitive function）、宏、特殊表达式或 autoload对象。如果不是这 些类型，比如某个符号的函数值是前面出现的某个符号导致无限循环，或者某个 符号函数值为空，都会导致一个错误invalid-function。
+
+求值过程就是沿着symbol路径一路走下去直到终点。
+
+' 用来停止求职， 可以认为是一个地址操作&并且终止求值。quote引用一个对象，那么就是各种类型的对象都可以，返回这个对象地址。所以下面'cons 返回的是cons这个函数的地址。
+  估计是 elisp 为了优化，quote 产生的对象是返回的是一个类似与引用的东西。 任何 side-effect 的 set* 函数都可以修改这个一个值
+
+#+begin_src elisp -r
+  (setq a '(1 2 3))
+  (setq b a)
+  (setcdr b '(2 4)) ;; 这个会改变 a (ref:quote)
+#+end_src
+  求值有两种，或者说两个地址空间。
+
+  1. function value
+
+  2. symbol value （应该叫 variable value？）
+
+elisp中，函数和变量并不是完全平等的，你不能再象scheme中那样了。即使你(setq func(lambda (...)))，也无法直接 把它做为一个function来做，因为setq就注定了func只能被当作一个变量 来处理，而lisp只会试图去找func对应的函数。
+
+  (defun f (x) (* x x)) ；
+  +(f 2)是正确的 (funcall f 2)也是正确的。可以说defun给f 定义 了两个值。f的函数值 为这个函数，f的symbal值为这个函数的指针。对于函数指针来说 只能用funcall.  所以 (f 2) 和 (funcall f 2) 都是正确的。+
+  **NO! NO!! NO!!!**
+  (funcall f 2)不正确! (经eshell验证,也可以在scratch buffer里面 C-j 执行）
+
+  Symbol's value as variable is void: f
+
+  (setq f #'f) 以后 (funcall f 2)成功。\\
+  执行 (setq f 1) 这个时候 f的 symbal值被改掉了。 \\
+  (f 2)还是成功,但是 (funcall f 2)失败了。 \\
+
+对于form来说有3种执行。
+
+1. 不求职，如 (setq foo 123) ;foo是不求值的。
+2. 取function value, 如 (setq foo (lambda (x) (* 3 x))) ，直接调用(foo 5)不能执行是因为foo作为第一个元素，求的是function cell中的值。你不得不(funcall foo 123), (apply foo 1 2 3)。
+   funcall和apply的关系：  (funcall f x y ...)等价于(apply f (list x y ...))
+3. 取symbol value, 其他的就都是这种情况。
+
+#+begin_src elisp
+  (setq foo (lambda (x) (* 3 x))) ; (lambda (x) (* 3 x)) \\
+  (setq bar '(foo 5))             ; (foo 5) \\
+  (car bar)                       ; foo\\
+  (funcall foo 5)                 ; 15\\
+  (funcall (car bar) (car (cdr bar))) ; wrong! why?
+#+end_src
+
+  (car bar)是符号'foo，而不是变量foo
+
+  类似的
+
+  #+begin_src elisp
+    (setq foo 5）
+    (setq bar 'foo)
+    (defun f (x) (* x x))
+    f(5) ; 正确
+    f(bar) ; 错误， 相当于 (* 'foo 'foo)
+  #+end_src
+
+  所以要 (funcall (symbol-value (car bar)) 3)
+
+  比如象(funcall cons 1 2)这样就是错误的 而(funcall 'cons 1 2)就是正确的。（因为cons没有variable value？）
+
+  #+begin_src elisp
+    (defun tmp (x)
+      (let* ((foo (lambda (x) (1+  x)))
+	     (bar (lambda (x) (* 3 x)))
+	     (y '((foo 3)
+		  (bar 5)))
+	     (z '(bar 5)))
+	    (mapcar (lambda (var)
+			    (funcall (symbol-value (car var)) (nth 1 var))) y)))
+
+    (tmp 5)
+  #+end_src
+
+  #+RESULTS:
+  | 4 | 15 |
+
+List的存在是lisp得名的原因。list只有三个基本操作：cons，car，cdr。cons表示的是，将一个symbol添加到某个现有list的表头上去；car表示取的某个list的表头；cdr表示取的某个list除了表头之外的剩余部分。car和cdr是标准的lisp黑话，没用过lisp系语言的人肯定不会知道 这两个词什么意思。
+
+从概念上来说，cons cell 其实非常简单的，就是两个有顺序的元素。第一个叫 CAR，第二个就 CDR。CAR 和 CDR 名字来自于 Lisp。它最初在IBM 704机 器上的实现。在这种机器有一种取址模式，使人可以访问一个存储地址中的”地 址（address）"部分和"减量（decrement）“部分。CAR指令用于取出地址部分 ，表示(Contents of Address part of Register)，CDR指令用于取出地址的减 量部分(Contents of the Decrement part of Register)。cons cell 也就是 construction of cells。car 函数用于取得cons cell 的 CAR 部分，cdr 取 得 cons cell 的 CDR 部分。cons cell 如此简单，但是它却能衍生出许多高级 的数据结构，比如链表，树，关联表等等。
+
+按列表最后一个 cons cell 的 CDR部分的类型分，可以把列表分为三类。如果它是nil的话，这个列表也称为”真列表” (true list)。'(1 2 3)
+
+如果既不是 nil 也不 是一个 cons cell，则这个列表称为”点列表”(dotted list)。'(1 2 . 3)
+
+还有一种可能，它指向列表中之前的一个 cons cell，则称为环形列表(circular list)。
+#+begin_src elisp
+'(1 . #1=(2 3 . #1#))                     ; => (1 2 3 . #1)
+#+end_src
+
+如果把真列表最后一个 cons cell 的 nil 省略不写，也就是 (1 . nil) 简写成 (1)，把 ( obj1 . ( obj2 . list)) 简写成 (obj1 obj2 . list)，那么列表最后可以写成一个用括号括起的元素列表：
+
+ #+begin_src elisp
+ '(1 . (2 . (3 . nil)))                  ; => (1 2 3)
+ #+end_src
+
+  列表和cons是等价的? 因为car和cdr对他们的操作结果是一样的。??
+  *NO!*
+
+  第一 '("first" . 1) ，不是一个 list  \\
+   什么是 list ?\\
+  a. nil 是一个 list\\
+  b. 如果 A  是一个 list , (cons B A) 是一个 list\\
+  *注意*
+  (equal (cons 1 1) '( 1 . 1)) 返回 t  \\
+  list 和 cons cell 是不一样的东西。 \\
+   是 list 的东西不一定是  cons cell , 例如 nil ,  \\
+   #+begin_src elisp
+   (consp nil) => nil\\
+   （listp nil) => t\\
+   #+end_src
+   是 cons cell 的东西不一定是 list  \\
+   但是 listp 这个函数比较特殊 \\
+       This function returns `t' if OBJECT is a cons cell or\\
+  `nil'. \\
+        Otherwise, it returns `nil'. \\
+   他不是真正判断一个类型是不是 list .
+
+  scheme 语言也许在 list 和 cons cell 上有更加明确的定义
+  #+begin_quote
+  guile> (pair? (cons 1 1))
+   #t
+  guile> (list? (cons 1 1))
+   #f
+  guile> (equal? (cons 1 1) '( 1 . 1))
+   #t
+  guile> (list? '())
+   #t
+  guile> (pair? '())
+   #f
+  #+end_quote
+
+字符的读入语法是在字符前加上一个问号，比如 ?A 代表字符 'A'。 \\
+
+?A ;=> 65\\
+?a ;=> 97\\
+
+** elisp函数中的quote
+
+#+begin_src elisp
+(defun dummy()
+   (list '("first" . 1)
+         '("second" .  2)))
+#+end_src
+如果认为在任何时候 (dummy) 都会返回  (("first" . 1 ) ("second" . 2))   那你就错了。   看下面的例子
+ #+begin_src  elisp
+   (let* ((m (dummy))
+	  n  ;; ----给n赋 一个nil值。
+	  (m1 (assoc "first" m)))
+     (setcdr m1 100)
+     (setq n (dummy))
+     (message "\n%S %S %S\n" m m1 n))
+
+ #+end_src
+n 的值居然是 (("first" . 100) ("second" . 2)). 只有这样写
+ #+begin_src elisp -r
+ (defun dummy()
+   (list (cons "first"  1)
+         (cons "second"  2)))
+ #+end_src
+
+ (dummy) 才会永远返回 (("first" . 1) ("second" . 2))
+
+这是一个有意思的现象。估计是 elisp 为了优化，quote 产生的对象是返回的是一个类似与引用[[(quote)]] 的东西。 任何 side-effect 的 set* 函数都可以修改这个一个值。
+
+那合理的解释是：函数的返回值跟函数本身可能根本就是一回事情。修改函数的返回值有可能导致函数本身被修改？
+
+function is nothing more than a list.
+
+ 所谓函数，本质上也是一个数据，就是 list. (lambda () '(1 2 4) 也就是一个简单的list. 函数的返回值也就是 list 中的一部分的 evaluation. 只不过这个特殊的例子，eval 之后，得到的是函数本身的 一部分， '(1 2 4).
+
+ 修改返回值，也就是修改原来 list （函数）中的一部分。
+
+Common Lisp 里也有同样的问题。Paul Graham 在《On Lisp》一书里给出一个规则： \\
+ "functions shouldn't return quoted lists." 并且指出除了宏展开函数以外，其他函数返回值中含有引用的列表都可能不安全。(具体位置在该书的 3.3 节)
+
+ 下列书中的例子更加明显：
+
+ #+begin_src elisp
+ (defun exclaim (expression)
+   (append expression '(oh my)))
+ #+end_src
+
+Then any later destructive modification of the return value\\
+
+ #+begin_example
+ > (exclaim '(lions and tigers and bears))
+ (LIONS AND TIGERS AND BEARS OH MY)
+ > (nconc* '(goodness))   ;---concatenate 连在一起,改变了函数中的'(oh my)
+ (LIONS AND TIGERS AND BEARS OH MY GOODNESS)
+ #+end_example
+
+could alter the list within the function:
+
+ #+begin_example
+ > (exclaim '(fixnums and bignums and floats))
+ (FIXNUMS AND BIGNUMS AND FLOATS OH MY GOODNESS)
+ #+end_example
+
+To make exclaim proof against such problems, it should be written:
+ #+begin_example
+ (defun exclaim (expression)
+   (append expression (list 'oh 'my)))
+ #+end_example
+
+** lisp谓词eq,eql,equal
+
+真正严谨的是 Common Lisp，CL 里有三种通用的等价谓词：eq, eql, equal
+#+begin_example
+CL-USER> (eq (cons 1 1) '(1 . 1))
+NIL
+CL-USER> (eql (cons 1 1) '(1 . 1))
+NIL
+CL-USER> (equal (cons 1 1) '(1 . 1))
+T
+#+end_example
+你觉得我的理解有错误，或者不准确？
+
+eq 的含义是指 两个对象是否存在于同一个内存区域。 \\
+equal 的含义是指 两个对象类型相同，而且两个对象看起来一样。\\
+eql 是什么，是 如果两个对象都是 number ，那么就用 equal 否则就用 eq   \\
+The eql predicate is true if its arguments are eq, or if they are\\
+numbers of the same type with the same value, or if they are character\\
+objects that represent the same character. For example:
+
+ *除了整数以外，其他都是指针。*
+ 因此 (eq 1 1) 返回 t , (eq 1.0 1.0) 返回 nil  \\
+ "eq 是比较指针， equal 是比较内容。" \\
+ 简化成这样，就很好理解，利于人脑记忆了。
+
+elisp对象的内容包含两部分，一部分表示类型，另一部分表示值，因此内容相同，首先类型要相同，其次值相同。
+
+这样(equal 1 1.0) 就返回 nil , 就就不让人很吃惊了
+
+#+begin_quote
+  用eq表示我想比较两个指针
+  用eql表示我想比较两个相同基本类型的值
+  用equal表示我想比较两个相同复杂类型的值
+#+end_quote
+
+我觉得你应该看看 CLTL2 中对于这三种等价谓词的精确定义和举例，对于理解elisp 里的相同特性应该有一定指导作用：
+
+ #+begin_quote
+ [Function]
+eq x y
+
+ (eq x y) is true if and only if x and y are the same identical
+object. (Implementationally, x and y are usually eq if and only if
+they
+address the same identical memory location.)
+
+It should be noted that things that print the same are not necessarily
+eq to each other. Symbols with the same print name usually are eq to
+each other because of the use of the intern function. However, numbers
+with the same value need not be eq, and two similar lists are usually
+not eq. For example:
+
+ (eq 'a 'b) is false.
+ (eq 'a 'a) is true.
+ (eq 3 3) might be true or false, depending on the implementation.
+ (eq 3 3.0) is false.
+ (eq 3.0 3.0) might be true or false, depending on the
+implementation.
+ (eq #c(3 -4) #c(3 -4))
+   might be true or false, depending on the implementation.
+ (eq #c(3 -4.0) #c(3 -4)) is false.
+ (eq (cons 'a 'b) (cons 'a 'c)) is false.
+ (eq (cons 'a 'b) (cons 'a 'b)) is false.
+ (eq '(a . b) '(a . b)) might be true or false.
+ (progn (setq x (cons 'a 'b)) (eq x x)) is true.
+ (progn (setq x '(a . b)) (eq x x)) is true.
+ (eq #\A #\A) might be true or false, depending on the
+implementation.
+ (eq "Foo" "Foo") might be true or false.
+ (eq "Foo" (copy-seq "Foo")) is false.
+ (eq "FOO" "foo") is false.
+
+ [Function]
+eql x y
+
+The eql predicate is true if its arguments are eq, or if they are
+numbers of the same type with the same value, or if they are character
+objects that represent the same character. For example:
+
+ (eql 'a 'b) is false.
+ (eql 'a 'a) is true.
+ (eql 3 3) is true.
+ (eql 3 3.0) is false.
+ (eql 3.0 3.0) is true.
+ (eql #c(3 -4) #c(3 -4)) is true.
+ (eql #c(3 -4.0) #c(3 -4)) is false.
+ (eql (cons 'a 'b) (cons 'a 'c)) is false.
+ (eql (cons 'a 'b) (cons 'a 'b)) is false.
+ (eql '(a . b) '(a . b)) might be true or false.
+ (progn (setq x (cons 'a 'b)) (eql x x)) is true.
+ (progn (setq x '(a . b)) (eql x x)) is true.
+ (eql #\A #\A) is true.
+ (eql "Foo" "Foo") might be true or false.
+ (eql "Foo" (copy-seq "Foo")) is false.
+ (eql "FOO" "foo") is false.
+
+ [Function]
+equal x y
+
+The equal predicate is true if its arguments are structurally similar
+(isomorphic) objects. A rough rule of thumb is that two objects are
+equal if and only if their printed representations are the same.
+
+Numbers and characters are compared as for eql. Symbols are compared
+as
+for eq. This method of comparing symbols can violate the rule of thumb
+for equal and printed representations, but only in the infrequently
+occurring case of two distinct symbols with the same print name.
+
+Certain objects that have components are equal if they are of the same
+type and corresponding components are equal. This test is implemented
+in
+a recursive manner and may fail to terminate for circular structures.
+
+For conses, equal is defined recursively as the two car's being equal
+and the two cdr's being equal.
+
+Two arrays are equal only if they are eq, with one exception: strings
+and bit-vectors are compared element-by-element. If either argument
+has
+a fill pointer, the fill pointer limits the number of elements
+examined
+by equal. Uppercase and lowercase letters in strings are considered by
+equal to be distinct. (In contrast, equalp ignores case distinctions
+in
+strings.)
+
+Compatibility note: In Lisp Machine Lisp, equal ignores the difference
+between uppercase and lowercase letters in strings. This violates the
+rule of thumb about printed representations, however, which is very
+useful, especially to novices. It is also inconsistent with the
+treatment of single characters, which in Lisp Machine Lisp are
+represented as fixnums.
+
+Two pathname objects are equal if and only if all the corresponding
+components (host, device, and so on) are equivalent. (Whether or not
+uppercase and lowercase letters are considered equivalent in strings
+appearing in components depends on the file name conventions of the
+file
+system.) Pathnames that are equal should be functionally equivalent.
+
+change_begin
+X3J13 voted in June 1989 (EQUAL-STRUCTURE)   to clarify that equal
+never
+recursively descends any structure or data type other than the ones
+explicitly described above: conses, bit-vectors, strings, and
+pathnames.
+Numbers and characters are compared as if by eql, and all other data
+objects are compared as if by eq.
+change_end
+
+ (equal 'a 'b) is false.
+ (equal 'a 'a) is true.
+ (equal 3 3) is true.
+ (equal 3 3.0) is false.
+ (equal 3.0 3.0) is true.
+ (equal #c(3 -4) #c(3 -4)) is true.
+ (equal #c(3 -4.0) #c(3 -4)) is false.
+ (equal (cons 'a 'b) (cons 'a 'c)) is false.
+ (equal (cons 'a 'b) (cons 'a 'b)) is true.
+ (equal '(a . b) '(a . b)) is true.
+ (progn (setq x (cons 'a 'b)) (equal x x)) is true.
+ (progn (setq x '(a . b)) (equal x x)) is true.
+ (equal #\A #\A) is true.
+ (equal "Foo" "Foo") is true.
+ (equal "Foo" (copy-seq "Foo")) is true.
+ (equal "FOO" "foo") is false.
+
+ [Function]
+equalp x y
+
+Two objects are equalp if they are equal; if they are characters and
+satisfy char-equal, which ignores alphabetic case and certain other
+attributes of characters; if they are numbers and have the same
+numerical value, even if they are of different types; or if they have
+components that are all equalp.
+
+Objects that have components are equalp if they are of the same type
+and
+corresponding components are equalp. This test is implemented in a
+recursive manner and may fail to terminate for circular structures.
+For
+conses, equalp is defined recursively as the two car's being equalp
+and
+the two cdr's being equalp.
+
+Two arrays are equalp if and only if they have the same number of
+dimensions, the dimensions match, and the corresponding components are
+equalp. The specializations need not match; for example, a string and
+a
+general array that happens to contain the same characters will be
+equalp
+(though definitely not equal). If either argument has a fill pointer,
+the fill pointer limits the number of elements examined by equalp.
+Because equalp performs element-by-element comparisons of strings and
+ignores the alphabetic case of characters, case distinctions are
+therefore also ignored when equalp compares strings.
+
+Two symbols can be equalp only if they are eq, that is, the same
+identical object.
+
+change_begin
+X3J13 voted in June 1989 (EQUAL-STRUCTURE)   to specify that equalp
+compares components of hash tables (see below), and to clarify that
+otherwise equalp never recursively descends any structure or data type
+other than the ones explicitly described above: conses, arrays
+(including bit-vectors and strings), and pathnames. Numbers are
+compared
+for numerical equality (see =), characters are compared as if by
+char-equal, and all other data objects are compared as if by eq.
+
+Two hash tables are considered the same by equalp if and only if they
+satisfy a four-part test:
+
+     * They must be of the same kind; that is, equivalent :test
+arguments were given to make-hash-table when the two hash tables were
+created.
+
+     * They must have the same number of entries (see
+hash-table-count).
+
+     * For every entry (key1, value1) in one hash table there must be
+a
+corresponding entry (key2, value2) in the other, such that key1 and
+key2
+are considered to be the same by the :test function associated with
+the
+hash tables.
+
+     * For every entry (key1, value1) in one hash table and its
+corresponding entry (key2, value2) in the other, such that key1 and
+key2
+are the same, equalp must be true of value1 and value2.
+
+The four parts of this test are carried out in the order shown, and if
+some part of the test fails, equalp returns nil and the other parts of
+the test are not attempted.
+
+If equalp must compare two structures and the defstruct definition for
+one used the :type option and the other did not, then equalp returns
+nil.
+
+If equalp must compare two structures and neither defstruct definition
+used the :type option, then equalp returns t if and only if the
+structures have the same type (that is, the same defstruct name) and
+the
+values of all corresponding slots (slots having the same name) are
+equalp.
+
+As part of the X3J13 discussion of this issue the following
+observations
+were made. Object equality is not a concept for which there is a
+uniquely determined correct algorithm. The appropriateness of an
+equality predicate can be judged only in the context of the needs of
+some particular program. Although these functions take any type of
+argument and their names sound very generic, equal and equalp are not
+appropriate for every application. Any decision to use or not use them
+should be determined by what they are documented to do rather than by
+any abstract characterization of their function. If neither equal nor
+equalp is found to be appropriate in a particular situation,
+programmers
+are encouraged to create another operator that is appropriate rather
+than blame equal or equalp for ``doing the wrong thing.''
+
+Note that one consequence of the vote to change the rules of
+floating-point contagion
+(CONTAGION-ON-NUMERICAL-COMPARISONS)   (described in section 12.1) is
+to
+make equalp a true equivalence relation on numbers.
+change_end
+
+ (equalp 'a 'b) is false.
+ (equalp 'a 'a) is true.
+ (equalp 3 3) is true.
+ (equalp 3 3.0) is true.
+ (equalp 3.0 3.0) is true.
+ (equalp #c(3 -4) #c(3 -4)) is true.
+ (equalp #c(3 -4.0) #c(3 -4)) is true.
+ (equalp (cons 'a 'b) (cons 'a 'c)) is false.
+ (equalp (cons 'a 'b) (cons 'a 'b)) is true.
+ (equalp '(a . b) '(a . b)) is true.
+ (progn (setq x (cons 'a 'b)) (equalp x x)) is true.
+ (progn (setq x '(a . b)) (equalp x x)) is true.
+ (equalp #\A #\A) is true.
+ (equalp "Foo" "Foo") is true.
+ (equalp "Foo" (copy-seq "Foo")) is true.
+ (equalp "FOO" "foo") is true.
+ #+end_quote
+
+* lisp构想例
+** 读取url让firefox打开
+
+- 读这个文件，把文件每一行存在一个列表里并返回
+
+#+begin_src elisp
+  (defun read-file-as-lines(file-path)
+    (with-temp-buffer    (insert-file-contents file-path)
+			 (split-string (buffer-string) "\n" t)))
+
+  (read-file-as-lines "./1.txt") > #'urls  ;; 把结果给变量urls。
+#+end_src
+
+- 列表一个个打印出来
+
+ #+begin_src elisp
+   (while urls
+     (message "%s" (pop urls)
+	      (sleep-for 1)))        ;; pop用于减少list
+ #+end_src
+
+- 调用firefox
+
+#+begin_example
+"C:\Program Files\Mozilla Firefox\firefox.exe" -new-tab $urls
+#+end_example
+http://cn.voidcc.com/question/p-vvrdqcpc-na.html
+
+** 去掉list重复项目
+两个函数 有参考意义。
+
+#+begin_src elisp
+  (defun list_member (x L)
+      (cond ((null L) nil)    ;if list L is empty, return NIL
+      ((equal x (car L)) T)   ;if element x is in L, return T
+      (T (list_member x (cdr L))))) ;else, recursively check remainder of L
+
+  (defun rem_dup (L)
+      (cond ((null L) nil)       ; if list L is empty, return NIL to user
+       ((list_member (car L) (cdr L)) (rem_dup (cdr L))) ; Skip duplicate element
+       (T (cons (car L) (rem_dup (cdr L)))))) ; else include it, and check rest of list recursively
+#+end_src
+
+** 删除list中的一项
+emacs 里面可以
+
+#+begin_src elisp
+(print before-save-hook )\\
+(delete 'delete-trailing-whitespace before-save-hook )
+#+end_src
+
+** 求全组合
+#+begin_src elisp
+  (defun cn (x)
+    (let (y)
+      (if (<= (length x) 1)
+	  (list x)
+	(progn (setq first (substring x 0 1))
+	       (setq y (substring x 1 (length x)))
+	       (setq z (cn y))
+	       (list z (list first) (mapcar (lambda (e) (append (list first) e)) z))))))
+
+
+  (defun cn (x)
+    (let (y)
+      (if (<= (length x) 1)
+	  x
+	(progn (setq first (substring x 0 1))
+	       (setq y (substring x 1 -1))
+	       (setq z (cn y))
+	       (print z)
+	       (concat z " " first " " (mapcar (lambda (e) (concat first e)) (list z)))
+	       ))))
+
+  (defun cn (x)
+    (let ((y) (first (substring x 0 1)))
+      (if (<= (length x) 1)
+	  x
+	(progn (setq y (substring x 1 (length x)))
+	       (setq z (cn y))
+	       (print first)
+	       (concat z " " first " "
+		       (mapconcat 'identity (mapcar (lambda (e) (concat first e)) (list z)) " "))
+	       ))))
+
+  (defun cn (x)
+    (let ((y) (first (substring x 0 1)))
+      (if (<= (length x) 1) x
+	(progn (setq y (substring x 1 (length x)))
+	       (setq z (cn y))
+	       (print first)
+	       (concat z " " first " " (mapconcat 'identity (mapcar (lambda (e) (concat first
+  e)) (split-string z " ")) " "))))))
+
+
+  (defun cn (x)
+    (let ((y)
+      (first (substring x 0 1))))
+      (if (<= (length x) 1)
+      x
+	(progn
+      (setq y (substring x 1 (length x)))
+      (setq z (cn y))
+      (concat z " " first " "
+	      (mapconcat 'identity (mapcar (lambda (e) (concat first e)) (split-string z " ")) " ")))))
+
+  cn("abcd")
+#+end_src
+
+#+RESULTS:
+: cn
+
+:   d c cd b bd bc bcd a ad ac acd ab abd abc abcd
+
+:it:  <2021-12-11 六>修改
