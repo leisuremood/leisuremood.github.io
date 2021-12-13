@@ -1,6 +1,7 @@
 #+options: toc:1
 #+begin_export md
 ---
+layout: post
 title: "Firefox浏览器插件"
 date: 2018-12-09
 draft: false

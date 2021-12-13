@@ -1,6 +1,7 @@
 #+options: toc:1
 #+begin_export md
 ---
+layout: post
 title: "内观禅修感悟"
 date: 2018-05-10
 draft: false

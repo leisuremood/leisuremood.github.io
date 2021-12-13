@@ -1,6 +1,7 @@
 #+options: toc:1
 #+begin_export md
 ---
+layout: post
 title: "Apk Dump 刷机"
 date: 2016-03-05
 tags: 
