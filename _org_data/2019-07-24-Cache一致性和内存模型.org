@@ -1,0 +1,973 @@
+---
+title: "2019 07 24 Cache一致性和内存模型"
+date: 2019-07-24
+draft: false
+tags: 
+    - it
+---
+
+#+OPTIONS: toc:2 ^:false
+
+* Cache一致性和内存模型
+
+[[https://wudaijun.com/2019/04/cpu-cache-and-memory-model/]]
+
+本文主要谈谈CPU Cache的设计，内存屏障的原理和用法，最后简单聊聊内存一致性。
+
+我们都知道存储器是分层级的，从CPU寄存器到硬盘，越靠近CPU的存储器越小越快，离CPU越远的存储器越大但越慢，即所谓存储器层级(Memory Hierarchy)。以下是计算机内各种存储器的容量和访问速度的典型值。
+
+从广义的概念上来说，所有的存储器都是其下一级存储器的Cache，CPU Cache缓存的是内存数据，内存缓存的是硬盘数据，而硬盘缓存的则是网络中的数据。本文只谈CPU Cache，一个简单的CPU Cache示意图如下:
+
+[[https://wudaijun.com/assets/image/201904/cache-simple.png]]
+
+图中忽略了一些细节，现代的CPU Cache通常分为三层，分别叫L1,L2,L3 Cache, 其中L1,L2 Cache为每个CPU核特有，L3为所有CPU核共有，L1还分为缓存指令的i-cache(只读)和缓存程序数据的d-cache，L2 L3 Cache则不区分指令和程序数据，称为统一缓存(unified cache)。本文主要讨论缓存命中和缓存一致性的问题，因此我们只关注L1 Cache，不区分指令缓存和程序数据缓存。
+
+** Cache Geometry
+
+当CPU加载某个地址上的数据时，会从Cache中查找，Cache由多个Cache Line构成(通常L1 Cache的Cache Line大小为64字节)，因此目标地址必须通过某种转换来映射对应的Cache Line，我们可以很容易想到两种方案:
+
+1. 指定地址映射到指定Cache Line，读Cache时对地址哈希(通常是按照Cache Line数量取模，即在二进制地址中取中间位)来定位Cache Line，写Cache时如果有冲突则丢掉老的数据。这种策略叫*直接映射*
+
+2. 任何地址都可以映射到任何Cache Line，读Cache时遍历所有Cache Line查找地址，写Cache时，可以按照LFU(最不常使用)或LRU(最近最少使用)等策略来替换。这种策略叫*全相联*
+
+直接映射的缺点在于在特定的代码容易发生冲突不命中，假设某CPU Cache的Cache Line大小为16字节，一共2个Cache Line，有以下求向量点乘的代码:
+
+由于x和y在函数栈中是连续存放的，x[0..3]和y[0..3]将映射到同一个Cache Line, x[4..7]和y[4..7]被映射到同一个Cache Line，那么在for循环一次读取x[i],y[i]的过程中，Cache Line将不断被冲突替换，导致Cache "抖动"(thrashing)。也就是说，在直接映射中，即使程序看起来局部性良好，也不一定能充分利用Cache。
+
+那么同样的例子，换成全相联，则不会有这个问题，因为LRU算法会使得y[0..3]不会替换x[0..3]所在的Cache Line，也就不会造成Cache抖动。全相连的缺点是由于每一次读Cache都需要遍历所有的Cache Line进行地址匹配，出于效率考虑，它不适用于太大的Cache。
+
+So，现代OS的操作系统是取两者折中，即组相连结构: 将若干Cache Line分为S个组，组间直接映射，组内全相连，如下图:
+
+[[https://wudaijun.com/assets/image/201904/cache-geometry.png]]
+
+通用的Cache映射策略，将目标地址分为t(标记位)，s(组索引)，b(块偏移)三个部分。我在[[https://wudaijun.com/2019/04/linux-perf/][Linux Perf 简单试用]]中也有例子说明程序局部性对效率的影响。
+
+** Cache Coherency
+
+前面我们谈的主要是Cache的映射策略，Cache设计的最大难点其实在于Cache一致性: 即所有CPU看到的指定地址的值是一致的。比如在CPU尝试修改某个地址值时，其它CPU可能已有该地址的缓存，甚至可能也在执行修改操作。因此该CPU需要先征求其它CPU的”同意”，才能执行操作。这需要给各个CPU的Cache Line加一些标记(状态)，辅以CPU之间的通信机制(事件)来完成， 这可以通过MESI协议来完成。MESI是以下四个状态的简称:
+
+M(modified): 该行刚被 CPU 改过，并且保证不会出现在其它CPU的Cache Line中。即CPU是该行的所有者。CPU持有该行的唯一正确参照。\\
+E(exclusive): 和M类似，但是未被修改，即和内存是一致的，CPU可直接对该行执行修改(修改之后为modified状态)。\\
+S(shared): 该行内容至少被一个其它CPU共享，因此该CPU不能直接修改该行。而需要先与其它CPU协商。\\
+I(invalid): 该行为无效行，即为空行，前面提到Cache策略会优先填充Invalid行。\\
+
+除了状态之外，CPU还需要一些消息机制:
+| 状态            | 描述                                                                                                                                                |
+|-----------------+-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Read            | CPU发起读取数据请求，请求中包含需要读取的数据地址。                                                                                                 |
+| Read Response   |  作为Read消息的响应，该消息可能是内存响应的，也可能是某CPU响应的(比如该地址在某CPU Cache Line中为Modified状态，该CPU必须返回该地址的最新数据)。     |
+| Invalidate      |  该消息包含需要失效的地址，所有的其它CPU需要将对应Cache置为Invalid状态 Invalidate                                                                   |
+| Ack             |  收到Invalidate消息的CPU在将对应Cache置为Invalid后，返回Invalid Ack                                                                                 |
+| Read Invalidate |  相当于Read消息+Invalidate消息，即取得数据并且独占它，将收到一个Read Response和所有其它CPU的Invalid Ack                                             |
+| Writeback       |  写回消息，即将状态为Modified的行写回到内存，通常在该行将被替换时使用。现代CPU Cache基本都采用”写回(Write Back)"而非"直写(Write Through)“的方式。 |
+
+具体MESI状态机的转换不再赘述，本质上来说，CPU体系结构依赖消息传递的方式来共享内存。
+
+下面举个例子，假设我们有个四核CPU系统，每个CPU只有一个Cache Line，每个Cache Line包含一个字节，内存地址空间为0x0-0xF，一共两个字节的数据，有如下操作序列:
+
+[[https://wudaijun.com/assets/image/201904/mesi-example.png]]
+
+上图第一行代表操作发生的时序，第二行是执行操作的CPU，第三行是CPU执行的操作，后面四行是各个CPU的Cache Line状态，最后两行是地址0和地址8在内存中的数据是是最新的(V)还是过期的(I)。初始状态下，每个CPU Cache Line都是未填充(Invalid)的。
+
+1. CPU0 加载地址0x0的数据，发送Read消息，对应Cache Line被标记为Shared
+
+2. CPU3 加载地址0x0的数据，同样，Cache Line标记为Shared
+
+3. CPU0 加载地址0x8的数据，导致Cache Line被替换，由于Cache Line之前为Shared状态，即与内存中数据一致，可直接覆盖Cache Line，而无需写回
+
+4. CPU2 加载地址0x0的数据，并且之后将要修改它，因此CPU2发出Read Invalidate消息以获取该地址的独占权，导致CPU3的Cache Line被置为Invalid，CPU2 Cache Line为Exclusive
+
+5. CPU2 修改地址0x0的数据，由于此时Cache Line为Exclusive，因此它可以直接修改Cache Line，此时Cache Line状态为Modified。此时内存中的0x0内存为过期数据(I)
+
+6. CPU1 对地址0x0的数据执行原子(atomic)递增操作，将发出Read Invalidate消息，CPU2将返回Read Response(而不是内存)，然后CPU1将持有地址0x0的Cache Line，状态为Modified，数据为递增后的数据，CPU2的Cache Line为Invalid，内存中的数据仍然是过期(I)状态
+
+7. CPU1 加载地址0x0的数据，此时CPU1 Cache Line将被替换，由于其状态为Modified，因此需要先执行写回操作将Cache Line写回内存，此时内存中的数据才是最新(V)的
+
+** Store Buffers
+
+MESI协议足够简单，并且能够满足我们对Cache一致性的需求，它在单个CPU对指定地址的反复读写方面有很好的性能表现，但在某个CPU尝试修改在其它CPU Cache Line中存在的数据时，性能表现非常糟糕，因为它需要发出Invalidate消息并等待Ack，这个延迟(Stall)对CPU来说对难以忍受的并且有时是无必要的，比如执行写入的CPU可能只是简单的给这个地址赋值(而不关心它的当前值是什么)。解决这类不必要的延迟的一个方案就是在CPU和Cache之间加一个Store Buffer: CPU可以先将要写入的数据写到Store Buffer，然后继续做其它事情。等到收到其它CPU发过来的Cache Line(Read Response)，再将数据从Store Buffer移到Cache Line。结构如下所示:
+
+[[https://wudaijun.com/assets/image/201904/cache-with-store-buffer.png]]
+
+然后加了Store Buffer之后，会引入另一个问题，比如有如下代码:
+
+初始状态下，假设a,b值都为0，并且a存在CPU1的Cache Line中(Shared状态)，可能出现如下操作序列:
+
+1. CPU0 要写入A，发出Read Invalidate消息，并将a=1写入Store Buffer
+
+2. CPU1 收到Read Invalidate，返回Read Response(包含a=0的Cache Line)和Invalidate Ack
+
+3. CPU0 收到Read Response，更新Cache Line(a=0)
+
+4. CPU0 开始执行 b = a + 1，从Cache Line中加载a，得到a=0
+
+5. CPU0 将Store Buffer中的a=1应用到Cache Line
+
+6. CPU0 得到 b=0+1，断言失败
+
+造成这个问题的根源在于对同一个CPU存在对a的两份拷贝，一份在Cache，一份在Store Buffer，前者用于读，后者用于写，因而出现CPU执行顺序与程序顺序(Program Order)不一致(先执行了b=a+1，再执行a=1)。
+
+** Store Forwarding
+
+Store Buffer可能导致破坏程序顺序(Program Order)的问题，硬件工程师在Store Buffer的基础上，又实现了”Store Forwarding”技术: CPU可以直接从Store Buffer中加载数据，即支持将CPU存入Store Buffer的数据传递(forwarding)给后续的加载操作，而不经由Cache。结构如图:
+
+[[https://wudaijun.com/assets/image/201904/cache-with-store-forwarding.png]]
+
+现在解决了同一个CPU读写数据的问题，再来看看并发程序:
+
+假设初始状态下，a=0; b=0;，a存在于CPU1的Cache中，b存在于CPU0的Cache中，均为Exclusive状态，CPU0执行foo函数，CPU1执行bar函数，上面代码的预期显然为断言为真。那么来看下执行序列:
+
+1. CPU1执行while(b == 0)，由于CPU1的Cache中没有b，发出Read b消息
+
+2. CPU0执行a = 1，由于CPU0的Cache中没有a，因此它将a(当前值1)写入到Store Buffer并发出Read Invalidate a消息
+
+3. CPU0执行b = 1，由于b已经存在在Cache中(Exclusive)，因此可直接执行写入
+
+4. CPU0收到Read b消息，将Cache中的b(当前值1)返回给CPU1，将b写回到内存，并将Cache Line状态改为Shared
+
+5. CPU1收到包含b的Cache Line，结束while (b == 0)循环
+
+6. CPU1执行assert(a == 1)，由于此时CPU1 Cache Line中的a仍然为0并且有效(Exclusive)，断言失败
+
+7. CPU1收到Read Invalidate a消息，返回包含a的Cache Line，并将本地包含a的Cache Line置为Invalid(已经晚了)
+
+8. CPU0收到CPU1传过来的Cache Line，然后将Store Buffer中的a(当前值1)刷新到Cache Line
+
+出现这个问题的原因在于CPU不知道a, b之间的数据依赖，CPU0对a的写入走的是Store Buffer(有延迟)，而对b的写入走的是Cache，因此b比a先在Cache中生效，导致CPU1读到b=1时，a还存在于Store Buffer中。
+
+** Memory Barrier
+
+对于上面的内存不一致，很难从硬件层面优化，因为CPU不可能知道哪些值是相关联的，因此硬件工程师提供了一个叫内存屏障的东西，开发者可以用它来告诉CPU该如何处理值关联性。我们可以在a=1和b=1之间插入一个内存屏障:
+
+当CPU看到内存屏障smp_mb()时，会先刷新当前(屏障前)的Store Buffer，然后再执行后续(屏障后)的Cache写入。这里的”刷新Store Buffer”有两种实现方式: 一是简单地刷新Store Buffer(需要挂起等待相关的Cache Line到达)，二是将后续的写入也写到Store Buffer中，直到屏障前的条目全部应用到Cache Line(可以通过给屏障前的Store Buffer中的条目打个标记来实现)。这样保证了屏障前的写入一定先于屏障后的写入生效，第二种方案明显更优，以第二种方案为例:
+
+1.  CPU1执行while(b == 0)，由于CPU1的Cache中没有b，发出Read b消息
+
+2.  CPU0执行a = 1，由于CPU0的Cache中没有a，因此它将a(当前值1)写入到Store Buffer并发出Read Invalidate a消息
+
+3.  CPU0看到smp_mb()内存屏障，它会标记当前Store Buffer中的所有条目(即a = 1被标记)
+
+4.  CPU0执行b = 1，尽管b已经存在在Cache中(Exclusive)，但是由于Store Buffer中还存在被标记的条目，因此b不能直接写入，只能先写入Store Buffer中
+
+5.  CPU0收到Read b消息，将Cache中的b(当前值0)返回给CPU1，将b写回到内存，并将Cache Line状态改为Shared
+
+6.  CPU1收到包含b的Cache Line，继续while (b == 0)循环
+
+7.  CPU1收到Read Invalidate a消息，返回包含a的Cache Line，并将本地的Cache Line置为Invalid
+
+8.  CPU0收到CPU1传过来的包含a的Cache Line，然后将Store Buffer中的a(当前值1)刷新到Cache Line，并且将Cache Line状态置为Modified
+
+9.  由于CPU0的Store Buffer中被标记的条目已经全部刷新到Cache，此时CPU0可以尝试将Store Buffer中的b=1刷新到Cache，但是由于包含B的Cache Line已经不是Exclusive而是Shared，因此需要先发Invalid b消息
+
+10. CPU1收到Invalid b消息，将包含b的Cache Line置为Invalid，返回Invalid Ack
+
+11. CPU1继续执行while(b == 0)，此时b已经不在Cache中，因此发出Read消息
+
+12. CPU0收到Invalid Ack，将Store Buffer中的b=1写入Cache
+
+13. CPU0收到Read消息，返回包含b新值的Cache Line
+
+14. CPU1收到包含b的Cache Line，可以继续执行while(b == 0)，终止循环
+
+15. CPU1执行assert(a == 1)，此时a不在其Cache中，因此发出Read消息
+
+16. CPU0收到Read消息，返回包含a新值的Cache Line
+
+17. CPU1收到包含a的Cache Line，断言为真
+
+上面的步骤看起来很多，其实比较简单，由于内存屏障的存在，导致b=1只能随a=1一起进入到Store Buffer，即b的新值不会先于a的新值出现在CPU0的Cache中，对于应用程序而言，内存屏障前的写入会先于内存屏障后的写入生效。
+
+** Invalid Queue
+
+引入了Store Buffer，再辅以Store Forwarding，Memory Barrier，看起来好像可以自洽了，然而还有一个问题没有考虑: Store Buffer的大小是有限的，所有写入操作的Cache Missing都会使用Store Buffer，特别是出现内存屏障时，后续的所有写入操作(不管是否Cache Miss)都会挤压在Store Buffer中(直到Store Buffer中屏障前的条目处理完)，因此Store Buffer很容易会满，当Store Buffer满了之后，CPU还是会卡在等对应的Invalid Ack以处理Store Buffer中的条目。因此还是要回到Invalid Ack中来，Invalid Ack耗时的主要原因是CPU要先将对应的Cache Line置为Invalid后再返回Invalid Ack，一个很忙的CPU可能会导致其它CPU都在等它回Invalid Ack。解决思路还是化同步为异步: CPU不必要处理了Cache Line之后才回Invalid Ack，而是可以先将Invalid消息放到某个请求队列Invalid Queue，然后就返回Invalid Ack。CPU可以后续再处理Invalid Queue中的消息，大幅度降低Invalid Ack响应时间。此时的CPU Cache结构图如下:
+
+[[https://wudaijun.com/assets/image/201904/cache-with-invalid-queue.png]]
+
+和Store Buffer类似，Invalid Queue有两个问题要考虑，一是CPU在处理任何Cache Line的MSEI状态前，都必须先看Invalid Queue中是否有该Cache Line的Invalid消息没有处理。这一点在CPU数据竞争不是很激烈时是可以接受的。这方面的一个极端是[[https://wudaijun.com/2015/01/false-sharing/][false sharing]]。
+
+Invalid Queue的另一个要考虑的问题是它也增加了破坏内存一致性的可能，即可能破坏我们之前提到的内存屏障:
+
+仍然假设a, b的初始值为0，a在CPU0,CPU1中均为Shared状态，b为CPU0独占(Exclusive状态)，CPU0执行foo，CPU1执行bar:
+
+1.  CPU0执行a = 1，由于其有包含a的Cache Line，将a写入Store Buffer，并发出Invalidate a消息
+
+2.  CPU1执行while(b == 0)，它没有b的Cache，发出Read b消息
+
+3.  CPU1收到CPU0的Invalidate a消息，将其放入Invalidate Queue，返回Invalidate Ack
+
+4.  CPU0收到Invalidate Ack，将Store Buffer中的a=1刷新到Cache Line，标记为Modified
+
+5.  CPU0看到smp_mb()内存屏障，但是由于其Store Buffer为空，因此它可以直接跳过该语句
+
+6.  CPU0执行b = 1，由于其Cache独占b，因此直接执行写入，Cache Line标记为Modified，
+
+7.  CPU0收到CPU1发的Read b消息，将包含b的Cache Line写回内存并返回该Cache Line，本地的Cache Line标记为Shared
+
+8.  CPU1收到包含b(当前值1)的Cache Line，结束while循环
+
+9.  CPU1执行assert(a == 1)，由于其本地有包含a旧值的Cache Line，读到a初始值0，断言失败
+
+10. CPU1这时才处理Invalid Queue中的消息，将包含a旧值的Cache Line置为Invalid
+
+问题在于CPU1在读取a的Cache Line时，没有先处理Invalid Queue中该Cache Line的Invalid操作，解决思路仍然是内存屏障，我们可以通过内存屏障让CPU标记当前Invalid Queue中所有的条目，所有的后续加载操作必须先等Invalid Queue中标记的条目处理完成再执行。因此我们可以在while和assert之间插入smp_mb()。这样CPU1在看到smp_mb()后，会先处理Invalidate Queue，然后发现本地没有包含a的Cache Line，重新从CPU0获取，得到a的值为1，断言成立。具体操作序列不再赘述。
+
+前面我们说的内存屏障可以同时作用于Store Buffer和Invalidate Queue，而实际上，CPU0(foo函数)只有写操作，因此只关心Store Buffer，同样的CPU1(bar函数)都是读操作，只关心Invalidate Queue，因此，大多数CPU架构将内存屏障分为了读屏障(Read Memory Barrier)和写屏障(Write Memory Barrier):
+
+- 读屏障: 任何读屏障前的读操作都会先于读屏障后的读操作完成
+
+- 写屏障: 任何写屏障前的写操作都会先于写屏障后的写操作完成
+
+- 全屏障: 同时包含读屏障和写屏障的作用
+
+因此前面的例子中，foo函数只需要写屏障，bar函数需要读屏障。实际的CPU架构中，可能提供多种内存屏障，比如可能分为四种:
+
+- LoadLoad: 相当于前面说的读屏障
+
+- LoadStore: 任何该屏障前的读操作都会先于该屏障后的写操作完成
+
+- StoreLoad: 任何该屏障前的写操作都会先于该屏障后的读操作完成
+
+- StoreStore: 相当于前面说的写屏障
+
+实现原理类似，都是基于Store Buffer和Invalidate Queue，不再赘述。
+
+** Instruction Reordering
+
+到目前为止我们只考虑了CPU按照程序顺序执行指令，而实际上为了更好地利用CPU，CPU和编译器都可能会对指令进行重排(reordering):
+
+1. 编译期间重排: 编译器在编译期间，可能对指令进行重排，以使其对CPU更友好
+
+2. 运行期间重排: CPU在执行指令的过程中，可能乱序执行以更好地利用流水线
+
+不管是CPU架构，VM，还是编译器，在对指令进行重排时都要遵守一个约束: 不管指令如何重排，对单线程来说，结果必然是一致的。即不会改变单线程程序的行为。比如: 编译器/CPU/VM 可以对a = 1;和b = 2;进行对换，而不能将c = a + b与前面两句对换，在实现上来说，对指定地址的操作(读写)序列，CPU是会保证和程序顺序一致的(比如a是先写后读)，并且CPU的读写对自己总是可见的(Store Forwarding)，对于不同的地址，CPU不能解析其依赖关系，可能会乱序执行，比如如果有其它线程依赖于a先于b赋值这个事实，那么就必须要应用程序告诉CPU/编译器，a和b有依赖关系，不要重排。前面提到的内存屏障，一直谈的是它的可见性(visibility)功能，它能够让屏障前的操作(读/写)即时刷新，被其它CPU看到。而内存屏障还有个功能就是限制指令重排(读/写指令)，否则即使在a = 1和b = 2之间加了内存屏障，b也有可能先于a赋值，前面的foo()和bar()的例子也会断言失败。
+
+** Programing
+
+对应用层而言，各种语言提供的并发相关关键字和工具，底层都会使用内存屏障。
+
+*** volatile
+
+java中可以通过volatile关键字来保证变量的可见性，并限制局部的指令重排。它的实现原理是在每个volatile变量写操作前插入StoreStore屏障，在写操作后插入StoreLoad屏障，在每个volatile变量读操作前插入LoadLoad屏障，在读操作后插入LoadStore屏障来完成。
+
+*** atomic
+
+以C++的atomic为例，atomic本身的职责是保证原子性，与volatile定位不太一样，后者本身是不保证原子性的，C++ atomic允许在保证原子的基础上，指定内存顺序，即使用哪种内存屏障。
+
+在这种情况下，可能出现全局执行序列为: D A B C，出现r1=r2=42的情况。memory_order_relaxed相当于没有加内存屏障。除了memory_order_relaxed外，还有:
+
+- memory_order_acquire: 在该原子变量的读操作前插入LoadLoad屏障，在读操作后插入LoadStore。即Load之后的所有读写操作不能重排到Load之前
+
+- memory_order_release: 在该原子变量的写操作前插入StoreStore屏障，在写操作后插入StoreLoad屏障。即Store之前的所有读写操作不能重排到Store之后
+
+- memory_order_acq_rel: 相当于 memory_order_acquire + memory_order_release
+
+- memory_order_seq_cst: 最强的顺序一致性，在memory_order_acq_rel的基础上，支持单独全序，即所有线程以同一顺序观测到该原子变量的所有修改
+
+这里也引申出关于内存屏障的两个常用语义:
+
+- acquire语义：Load 之后的读写操作无法被重排至 Load 之前。即 相当于LoadLoad和LoadStore屏障。
+
+- release语义：Store 之前的读写操作无法被重排至 Store 之后。即 相当于LoadStore和StoreStore屏障。
+
+注意acquire和release语义没有提到StoreLoad屏障，StoreLoad屏障是四种屏障中开销最大的，这个在后面会提到。
+
+*** mutex
+
+mutex的实现通常是在mutex lock时加上acquire屏障(LoadLoad+LoadStore)，在mutex unlock时加上release屏障(StoreStore+StoreLoad)，例如:
+
+由于mutex任意时刻只能被一个线程占有，因此A线程拿到mutex必然在B线程释放mutex之后，由于内存屏障的存在，mutex_lock和mutex_unlock之间的指令只能在mutex里面(无法越过mutex)，并且A线程能即时看到B线程mutex中作出的更改。
+
+** 
+注意，这里列举的volatile, atomic, mutex的具体实现和语义可能在不同的语言甚至同种语言不同的编译平台中有所区别(如C++不同的VS版本对volatile关键字的内存屏障使用有所区别)。对开发者而言，编写并发程序需要关注三个东西: 原子性，可见性和顺序性。
+
+- 原子性: 尽管在如今大部分平台下，对一个字的数据进行存取(int,指针)的操作本身就是原子性的，但为了更好地跨平台性，通过atomic操作来实现原子性是更好的方法，并且不会造成额外的开销。C++的atomic还提供可见性和顺序性选项
+
+- 可见性: 数据同步相关，前面讨论的CPU Cache设计主要关注的就是可见性，即同一时刻所有CPU看到的某个地址上的值是一致的。Cache一致性主要解决的就是数据可见性的问题
+
+- 顺序性: 内存屏障的另一个功能就是可以限制局部的指令重排(一些文章将内存屏障定义为限制指令重排工具，我认为是不准确的，如前面所讨论的，即使没有指令重排，有时也需要内存屏障来保证可见性)。内存屏障保证屏障前的某些操作必定限于屏障后的操作*发生且可见*。但屏障前或屏障后的指令，CPU/编译器仍然可以在不改变单线程结果的情况下进行局部重排。每个硬件平台有自己的基础顺序性(强/弱内存模型)
+
+** Weak/Strong Memory Models
+
+不同的处理器平台，本身的内存模型有强(Strong)弱(Weak)之分。
+
+- Weak Memory Model: 如DEC Alpha是弱内存模型，它可能经历所有的四种内存乱序(LoadLoad, LoadStore, StoreLoad, StoreStore)，任何Load和Store操作都能与任何其它的Load或Store操作乱序，只要其不改变单线程的行为。
+
+- Weak With Date Dependency Ordering: 如ARM, PowerPC, Itanium，在Aplpha的基础上，支持数据依赖排序，如C/C++中的A->B，它能保证加载B时，必定已经加载最新的A
+
+- Strong Memory Model: 如X86/64，强内存模型能够保证每条指令acquire and release语义，换句话说，它使用了LoadLoad/LoadStore/StoreStore三种内存屏障，即避免了四种乱序中的三种，仍然保留StoreLoad的重排，对于代码片段7来说，它仍然可能出现r1=r2=42的情况
+
+- Sequential Consistency: 最强的一致性，理想中的模型，在这种内存模型中，没有乱序的存在。如今很难找到一个硬件体系结构支持顺序一致性，因为它会严重限制硬件对CPU执行效率的优化(对寄存器/Cache/流水线的使用)。
+
+** Summary
+
+本文比较杂乱，前面主要介绍CPU Cache结构和Cache一致性问题，引出内存屏障的概念。后面顺便简单谈了谈指令乱序和内存一致性。
+
+实际的CPU Cache结构比上面阐述的要复杂得多，其核心的优化理念都是化同步为异步，然后再去处理异步下的一致性问题(处理不了就交给开发者...)。尽管异步会带来更多的问题，但它仍然是达成高吞吐量的必经之路。硬件方面的结构优化到一定程度了，CPU/编译器就开始打应用层代码的主意: 指令重排。
+
+对开发者来说，应用程序可以通过封装好的mutex完成大部分的并发控制，而无需关注底层用了哪些内存屏障，各平台的内存一致性等细节。但是在使用比mutex更底层的同步机制(如atomic, volatile, memory-barrier, lock-free等)时，就要务必小心。从原子性，可见性，顺序性等方面确保代码执行结果如预期。
+
+* References
+
+1. [[https://wudaijun.com/2018/09/distributed-consistency/][一致性杂谈]]
+
+2. [[https://irl.cs.ucla.edu/~yingdi/web/paperreading/whymb.2010.06.07c.pdf][Memory Barriers: a Hardware View for Software Hackers]]
+
+3. [[https://preshing.com/20120930/weak-vs-strong-memory-models/][Weak vs. Strong Memory Models]]
+
+4. [[https://preshing.com/20120913/acquire-and-release-semantics/][Acquire and Release Semantics]]
+
+* c++11内存模型解读
+
+https://www.cnblogs.com/catch/p/3803130.html
+
+** 关于乱序
+
+说到内存模型，首先需要明确一个普遍存在，但却未必人人都注意到的事实：程序通常并不是总按着照源码中的顺序一一执行，此谓之乱序，乱序产生的原因可能有好几种：
+
+1. 编译器出于优化的目的，在编译阶段将源码的顺序进行交换。
+
+2. 程序执行期间，指令流水被 cpu 乱序执行。
+
+3. inherent cache 的分层及刷新策略使得有时候某些写读操作的从效果上看，顺序被重排。
+
+以上乱序现象虽然来源不同，但从源码的角度，对上层应用程序来说，他们的效果其实相同：写出来的代码与最后被执行的代码是不一致的。这个事实可能会让人很惊讶：有这样严重的问题，还怎么写得出正确的代码？这担忧是多余的了，乱序的现象虽然普遍存在，但它们都有很重要的一个共同点：在单线程执行的情况下，乱序执行与不乱序执行，最后都会得出相同的结果 (both end up with the same observable result), 这是乱序被允许出现所需要遵循的首要原则，也是为什么乱序虽然一直存在但却多数程序员大部分时间都感觉不到的根本原因。
+
+乱序的出现说到底是编译器，CPU 等为了让你程序跑得更快而作出无限努力的结果，程序员们应该为它们的良苦用心抹一把泪。
+
+从乱序的种类来看，乱序主要可以分为如下4种：
+
+1. 写写乱序(store store), 前面的写操作被放到了后面的操作之后，比如：
+
+a = 3;b = 4;被乱序为：b = 4;a = 3; 
+
+1. 写读乱序(store load)，前面的写操作被放到了后面的读操作之后，比如：
+
+a = 3;load(b);被乱序为load(b);a = 3; 
+
+1. 读读乱序(load load)， 前面的读操作被放到了后一个读操作之后，比如：
+
+load(a);load(b);被乱序为：load(b);load(a); 
+
+1. 读写乱序(load store), 前面的读操作被放到了后一个写操作之后，比如：
+
+load(a);b = 4;被乱序为：b = 4;load(a); 
+
+程序的乱序在单线程的世界里多数时候并没有引起太多引人注意的问题，但在多线程的世界里，这些乱序就制造了特别的麻烦，究其原因，最主要的有2个：
+
+1. 并发不能保证修改和访问共享变量的操作原子性，使得一些中间状态暴露了出去，因此像 mutex，各种 lock 之类的东西在写多线程时被频繁地使用。
+
+2. 变量被修改后，该修改未必能被另一个线程及时观察到，因此需要”同步”。 解决同步问题就需要确定内存模型，也就是需要确定线程间应该怎么通过共享内存来进行交互([[https://en.wikipedia.org/wiki/Memory_model_(programming)][查看维基百科]]).
+
+** 内存模型
+
+内存模型所要表达的内容主要是怎么描述一个内存操作的效果，在各个线程间的可见性的问题。修改操作的效果不能及时被别的线程看见的原因有很多，比较明显的一个是，对计算机来说，通常内存的写操作相对于读操作是昂贵很多很多的，因此对写操作的优化是提升性能的关键，而这些对写操作的种种优化，导致了一个很普遍的现象出现：写操作通常会在 CPU 内部的 cache 中缓存起来。这就导致了在一个 CPU 里执行一个写操作之后，该操作导致的内存变化却不一定会马上就被另一个 CPU 所看到，这从另一个角度讲，效果上其实就是读写乱序了。
+
+cpu1 执行如下：a = 3;cpu2 执行如下：load(a); 
+
+对如上代码，假设 a 的初始值是 0, 然后 cpu1 先执行，之后 cpu2 再执行，假设其中读写都是原子的，那么最后 cpu2 如果读到 a = 0 也其实不是什么奇怪事情。很显然，这种在某个线程里成功修改了全局变量，居然在另一个线程里看不到效果的后果是很严重的。
+
+因此必须要有必要的手段对这种修改公共变量的行为进行同步。
+
+c++11 中的 atomic library 中定义了以下6种语义来对内存操作的行为进行约定，这些语义分别规定了不同的内存操作在其它线程中的可见性问题：
+
+#+begin_src C
+  enum memory_order {
+    memory_order_relaxed,   
+    memory_order_consume,   
+    memory_order_acquire,
+    memory_order_release,   
+    memory_order_acq_rel,   
+    memory_order_seq_cst
+  }; 
+#+end_src
+
+我们主要讨论其中的几个：relaxed, acquire, release, seq_cst(sequential consistency).
+
+** relaxed 语义
+
+首先是 relaxed 语义，这表示一种最宽松的内存操作约定，该约定其实就是不进行约定，以这种方式修改内存时，不需要保证该修改会不会及时被其它线程看到，也不对乱序做任何要求，因此当对公共变量以 relaxed 方式进行读写时，编译器，cpu 等是被允许按照任意它们认为合适的方式来加以优化处理的。
+
+** release-acquire 语义
+
+如果你曾经去看过别的介绍内存模型相关的文章，你一定会发现 release 总是和 acquire 放到一起来讲，这并不是偶然。事实上，release 和 acquire 是相辅相承的，它们必须配合起来使用，这俩是一个 "package deal"， 分开使用则完全没有意义。具体到其中， release 用于进行写操作，acquire 则用于进行读操作，它们结合起来表示这样一个约定：
+
+#+begin_quote
+  如果一个线程A对一块内存 m 以 release 的方式进行修改，那么在线程 A 中，所有在该 release 操作之前进行的内存操作，都在另一个线程 B 对内存 m 以 acquire 的方式进行读取之后，变得可见。
+#+end_quote
+
+举个粟子，假设线程 A 执行如下指令：
+
+a.store(3);b.store(4);m.store(5, release); 
+
+线程 B 执行如下:
+
+e.load();f.load();m.load(acquire);g.load();h.load(); 
+
+如上，假设线程 A 先执行，线程 B 后执行, 因为线程 A 中对 m 以 release 的方式进行修改， 而线程 B 中以 acquire 的方式对 m 进行读取，所以当线程 B 执行完 m.load(acquire) 之后， 线程 B 必须已经能看到 a == 3, b == 4. 以上死板的描述事实上还传达了额外的不那么明显的信息：
+
+- release 和 acquire 是相对两个线程来说的，它约定的是两个线程间的相对行为：如果其中一个线程 A 以 release 的方式修改公共变量 m， 另一个线程 B 以 acquire 的方式时读取该 m 时，要有什么样的后果，但它并不保证，此时如果还有另一个线程 C 以非 acquire 的方式来读取 m 时，会有什么后果。
+
+- 一定程度阻止了乱序的发生，因为要求 release 操作之前的所有操作都在另一个线程 acquire 之后可见，那么：
+
+  - release 操作之前的所有内存操作不允许被乱序到 release 之后。
+
+  - acquire 操作之后的所有内存操作不允许被乱序到 acquire 之前。
+
+而在对它们的使用上，有几点是特别需要注意和强调的：
+
+1. release 和 acquire 必须配合使用，分开单独使用是没有意义。
+
+2. release 只对写操作(store) 有效，对读 (load) 是没有意义的。
+
+3. acquire 则只对读操作有效，对写操作是没有意义的。
+
+现代的处理器通常都支持一些 read-modify-write 之类的指令，对这种指令，有时我们可能既想对该操作 执行 release 又要对该操作执行 acquire，因此 c++11 中还定义了 memory_order_acq_rel，该类型的操作就是 release 与 acquire 的结合，除前面提到的作用外，还起到了 memory barrier 的功能。
+
+** sequential consistency
+
+sequential consistency 相当于 release + acquire 之外，还加上了一个对该操作加上全局顺序的要求，这是什么意思呢？
+
+简单来说就是，对所有以 memory_order_seq_cst 方式进行的内存操作，不管它们是不是分散在不同的 cpu 中同时进行，这些操作所产生的效果最终都要求有一个全局的顺序，而且这个顺序在各个相关的线程看起来是一致的。
+
+举个粟子,假设 a, b 的初始值都是0：
+
+线程 A 执行：
+
+a.store(3, seq_cst); 
+
+线程 B 执行：
+
+b.store(4, seq_cst); 
+
+如上对 a 与 b 的修改虽然分别放在两个线程里同时进行，但是这多个动作毕竟是非原子的，因此这些操作地进行在全局上必须要有一个先后顺序：
+
+1. 先修改a, 后修改 b，或
+
+2. 先修改b, 把整个a。
+
+而且这个顺序是固定的，必须在其它任意线程看起来都是一样，因此 a == 0 && b == 4 与 a == 3 && b == 0 不允许同时成立。
+
+* 后话
+
+这篇随笔躺在我的草稿箱里已经半年多时间了，半年多来我不断地整理在这方面的知识，也在不断理清自己的思路，最后还是觉得关于内存模型有太多可以说却不是一下子能说得清楚的东西了，因此这儿只能把想说的东西一减再减，把范围缩小到 c++11 语言层面上作简单介绍，纯粹算是做个总结，有兴趣深入了解更多细节的读者，我强烈推荐去看一下 Herb Sutter 在这方面做的一个 [[https://channel9.msdn.com/Shows/Going+Deep/Cpp-and-Beyond-2012-Herb-Sutter-atomic-Weapons-1-of-2][talk]], 内存模型方面的知识是很难理解，更难以正确使用的，在大多数情况下使用它而得到的些少性能优势，已经完全不值得为此而带来的代码复杂性及可读性方面的损失，如果你还在犹豫是否要用这些相对底层的东西的时候，就不要用它，犹豫就说明还有其它选择，不到没得选择，都不要亲自实现 lock free 相关的东西。
+
+* 
+* 引用
+
+[[https://bartoszmilewski.com/2008/11/11/who-ordered-sequential-consistency/]]
+
+[[https://bartoszmilewski.com/2008/11/05/who-ordered-memory-fences-on-an-x86/]]
+
+[[https://bartoszmilewski.com/2008/12/01/c-atomics-and-memory-ordering/]]
+
+[[https://en.cppreference.com/w/cpp/atomic/memory_order]]
+
+[[https://preshing.com]]
+
+* C++11中的内存模型详解
+https://c.tedu.cn/notes/266765.html
+
+** 一、legacy GCC __sync
+
+据说在C++11标准出来之前，大家都诟病C++标准没有一个明确的内存模型，随着多线程开发的普及这个问题显得越来越迫切。当然各个C++编译器实现者也是各自为政，GCC自然是实用主义当道，于是根据Intel的开发手册老早就搞出了一系列的__sync原子操作函数集合，这也是被广大程序员最为熟悉常用的操作了吧，罗列如下：
+
+ [[https://c.tedu.cn/upload/20171024/20171024151936_367.png]]
+
+上面的OP操作包括add、sub、or、and、xor、nand这些常见的数学操作，而type表示的数据类型Intel官方允许的是int、long、long long的带符号和无符号类型，但是GCC扩展后允许任意1/2/4/8的标量类型;CAS的操作有两个版本分别返回bool表示是否成功，而另外一个在操作之前会先返回ptr地址处存储的值;__sync_synchronize直接插入一个full memory barrier，当然你也可能经常见到像asm volatile(“" ::: "memory”);这样的操作。前面的这些原子操作都是full barrier类型的，这意味着：任何内存操作的指令不允许跨越这些操作重新排序。
+
+__sync_lock_test_and_set用于将value的值写入ptr的位置，同时返回ptr之前存储的值，其内存模型是acquire barrier，意味着该操作之后的memory store指令不允许重排到该操作之前去，不过该操作之前的memory store可以排到该操作之后去，而__sync_lock_release则更像是对前面一个操作锁的释放，通常意味着将0写入ptr的位置，该操作是release barrier，意味着之前的memory store是全局可见的，所有的memory load也都完成了，但是接下来的内存读取可能会被排序到该操作之前执行。可以这里比较绕，翻译起来也比较的拗口，不过据我所见，这里很多是用在自旋锁类似的操作上，比如：
+
+ [[https://c.tedu.cn/upload/20171024/20171024151943_76.png]]
+
+其实这里的1可以是任何non-zero的值，主要是用作bool的效果。
+
+*** 二、C++11 新标准中的内存模型
+
+上面GCC那种full barrier的操作确实有效，但是就像当初系统内核从单核切换到多核用大颗粒锁一样的简单粗暴，先不说这种形势下编译器和处理器无法进行优化，光要变量使其对他处理器可见，就需要在处理间进行硬件级别的同步，显然是十分耗费资源的。在C++11新标准中规定的内存模型(memory model)颗粒要细化的多，如果熟悉这些内存模型，在保证业务正确的同时可以将对性能的影响减弱到最低。
+
+原子变量的通用接口使用store()和load()方式进行存取，可以额外接受一个额外的memory order参数，而不传递的话默认是最强模式Sequentially Consistent。 根据执行线程之间对变量的同步需求强度，新标准下的内存模型可以分成如下几类：
+
+*** 2.1 Sequentially Consistent
+
+该模型是最强的同步模式，参数表示为std::memory_order_seq_cst，同时也是默认的模型。
+
+ [[https://c.tedu.cn/upload/20171024/20171024151948_342.png]]
+
+对于上面的例子，即使x和y是不相关的，通常情况下处理器或者编译器可能会对其访问进行重排，但是在seq_cst模式下，x.store(2)之前的所有memory accesses都会happens-before在这次store操作。
+
+另外一个角度来说：对于seq_cst模式下的操作，所有memory accesses操作的重排不允许跨域这个操作，同时这个限制是双向的。
+
+*** 2.2 Acquire/Release
+
+GCC的wiki可能讲的不太清楚，查看下面的典型Acquire/Release的使用例子：
+
+ [[https://c.tedu.cn/upload/20171024/20171024151952_616.png]]
+
+毫无疑问，如果是seq_cst，那么上面的操作一定是成功的(打印变量b显示为1)。
+
+a. memory_order_release保证在这个操作之前的memory accesses不会重排到这个操作之后去，但是这个操作之后的memory accesses可能会重排到这个操作之前去。通常这个主要是用于之前准备某些资源后，通过store+memory_order_release的方式”Release”给别的线程;
+
+b. memory_order_acquire保证在这个操作之后的memory accesses不会重排到这个操作之前去，但是这个操作之前的memory accesses可能会重排到这个操作之后去。通常通过load+memory_order_acquire判断或者等待某个资源，一旦满足某个条件后就可以安全的”Acquire”消费这些资源了。
+
+*** 2.3 Consume
+
+这是一个相比Acquire/Release更加宽松的内存模型，对非依赖的变量也去除了happens-before的限制，减少了所需同步的数据量，可以加快执行的速度。
+
+ [[https://c.tedu.cn/upload/20171024/20171024151959_884.png]]
+
+线程2的assert会pass，而线程3的assert可能会fail，因为n出现在了store表达式中，算是一个依赖变量，会确保对该变量的memory access会happends-before在这个store之前，但是m没有依赖关系，所以不会同步该变量，对其值不作保证。
+
+Comsume模式因为降低了需要在硬件之间同步的数量，所以理论上其执行的速度会比之上面的内存模型块一些，尤其在共享内存大规模数据量情况下，应该会有较明显的差异表现出来。
+
+在这里，Acquire/Consume~Release这种线程间同步协作的机制就被完全暴露了，通常会形成Acquired/Consume来等待Release的某个状态更新。需要注意的是这样的通信需要两个线程间成对的使用才有意义，同时对于没有使用这个内存模型的第三方线程没有任何作用效果。
+
+*** 2.4 Relaxed
+
+最宽松的模式，memory_order_relaxed没有happens-before的约束，编译器和处理器可以对memory access做任何的re-order，因此另外的线程不能对其做任何的假设，这种模式下能做的唯一保证，就是一旦线程读到了变量var的最新值，那么这个线程将再也见不到var修改之前的值了。
+
+这种情况通常是在需要原子变量，但是不在线程间同步共享数据的时候会用，同时当relaxed存一个数据的时候，另外的线程将需要一个时间才能relaxed读到该值，在非缓存一致性的构架上需要刷新缓存。在开发的时候，如果你的上下文没有共享的变量需要在线程间同步，选用Relaxed就可以了。
+
+*** 2.5 小结
+
+看到这里，你对Atomic原子操作，应当不仅仅停留在indivisable的层次了，因为所有的内存模型都能保证对变量的修改是原子的，C++11新标准的原子应该上升到了线程间数据同步和协作的问题了，跟前面的LockFree关系也比较密切。
+
+手册上也这样告诫菜鸟程序员：除非你知道这是什么，需要减弱线程间原子上下文同步的耦合性增加执行效率，才考虑这里的内存模型来优化你的程序，否则还是老老实实的使用默认的memory_order_seq_cst，虽然速度可能会慢点，但是稳妥些，万一由于你不成熟的优化带来问题，是很难去调试的。
+
+** 三、C++11 GCC __atomic
+
+GCC实现了C++11之后，上面的__sync系列操作就变成了Legacy而不被推荐使用了，而基于C++11的新原子操作接口使用__atomic作为前缀。
+
+对于普通的数学操作函数，其函数接口形式为：
+
+ [[https://c.tedu.cn/upload/20171024/20171024152006_488.png]]
+
+除此之外，还根据新标准提供了一些新的接口：
+
+ [[https://c.tedu.cn/upload/20171024/20171024152011_867.jpg]]
+
+从函数名，看起来意思也很明了吧，上面的带_n的后缀版本如果去掉_n就是不用提供memorder的seq_cst版本。最后的两个函数，是判断系统上对于某个长度的对象是否会产生lock-free的原子操作，一般long long这种8个字节是没有问题的，对于支持128位整形的构架就可以达到16字节无锁结构了。
+
+Boost.Asio这里就不在罗列了，不过其中有一些例子比较好，基于内存模型的Wait-free的ring buffer、producer-customer的例子，可以去看看。
+
+* 参考文献
+
+Chapter 45. Boost.Atomic
+
+Chapter 5. Boost.Atomic
+
+6.52 Built-in Functions for Memory Model Aware Atomic Operations
+
+6.51 Legacy __sync Built-in Functions for Atomic Memory Access
+
+Concurrent programming the fast and dirty way!
+
+n3337.pdf
+
+GCC wiki on atomic synchronization
+
+* Linux中的memorybarrier
+
+https://blog.csdn.net/phenix_lord/article/details/50545364
+
+- 基本的memory ordering特征
+
+原则：内核按照最relax的memory ordering(DEC Alpha)来设计，其内存模型的特点如下：
+
+对不同地址的普通内存操作会发生乱序(对同一地址的读写，由cache一致性保证)
+
+注：和ARM的内存模型不同的是：write barrier/memorybarrier不能单独对系统中所有的CPU核心，write barrier前的写操作先于其后的写操作完成，必须配对使用datadependency(存在address dependency的两个写操作)、read barrier/memory barrier才能保证。
+
+- compiler barrier
+
+这种memorybarrier与CPU的内存模型无关，是通知编译器在优化过程中，保证该barrier前的内存操作语句和其后的内存操作语句发生乱序。也就是该barrier之前的内存操作语句对应的机器指令不会出现在该barrier之后的内存操作语句对应的机器指令之后，反之亦然。
+
+在LINUX内核中对应的接口是barrier()，其根据不同的编译器有不同的定义。
+
+- CPU memory barrier
+
+这里描述的是Linux内核的接口的基本要求，实际实现过程中其memory order作用可能有加强，需要根据在对于架构下内核代码使用的指令来判断。比如对于ARM下的LOCK指令的实现使用了smp_mb，其作用强于本身的定义。以下描述的所有barrier，确保的是按照program order 在barrier接口前后的对应类型的内存操作的相对顺序，并不意味着barrier接口的执行完成，barrier接口前面的内存的操作就完成了(一些体系结构有相关的指令，比如ARM的DSB指令)。虽然在X86和ARM环境，所有的barrier接口都具有cumulative属性，但是内核只保证General barrier的cumulative属性。除data dependency barrier以外的其他CPU memory barrier都隐含了compiler barrier，不过对于data dependency barrier的使用场景，编译器一般也不会发送乱序。
+
+ 
+
+- Write barrier
+
+基本作用：和Readbarrier/memory barrier配合使用，保证program order在Write barrier之前的写操作不会和其后的写操作发生乱序，Linux内核不保证Writebarrier有cumulative特性(就是和ARM的DMB类似的传递性，但是ARM和X86都保证)，当然对一些平台上的实现，是有cumulative特性的。其对应的内核接口为wmb()/smp_wmb()，其中的smp_wmb()在单CPU系统中就定义为空，如果不涉及和外设的互斥，smp_wmb()是个不错的选择，否则只能用wmb()。
+
+- Read barrier
+
+基本作用：保证programorder在Read barrier之前的读操作不会和其后的读操作发生乱序，Linux内核不保证Read barrier有cumulative特性(就是和ARM的DMB类似的传递性)，当然对一些平台上的实现，是有cumulative特性的。 对应的内核接口为rmb()/smp_rmb()
+
+- Data dependency barrier
+
+基本作用：用在存在addressdependency的两个读操作之间，和Writebarrier/memory barrier配合使用，确保对这两个读操作操作的内存的写操作能够按照program order可见，是一种弱化的Read barrier。注：对于X86、ARM等主流系统，存在address dependency内存操作在和write barrier配合的时候可以确保对应的写操作按照program order可见，不需要使用Data dependency barrier，在X86和ARM架构下，这个接口定义为空。这种barrier仅仅对DEC Alpha等CPU才定义为使用mb之类的指令。
+
+例子：
+
+#+begin_quote
+{ A == 1, B == 2, C = 3, P == &A, Q == &C }
+
+T1: B = 4;wmb() ;P=&B
+
+T2: Q=P ; P=*Q
+#+end_quote
+
+在没有Data dependencybarrier的情况下，对某些CPU，Q=&B && P=2是可能出现的。这是因为虽然wmb确保了在T1上B =4先于 P=&B执行，但是扩散到T2的时候，可能对P的变更先于对B的变更到达T2，也就是单单的wmb不能确保对所有的CPU(PE)，B=4先于P=&B可见。需要注意的是，这里Q=P仍然是先于P=*Q执行的，没有乱序。这一点和之前的X86、ARM明显不一样。。。
+
+ 
+
+对应接口read_barrier_depends()/smp_read_barrier_depends()
+
+ 
+
+注：可以认为write barrier只能确保CPU按照program order提交写操作，address dependency能确保CPU按照program order来提交读操作，但是写操作对读操作的可见顺序需要read barrier/data dependency barrier来保证？
+
+- General barrier
+
+基本作用：保证programorder在Generalbarrier之前的读写操作不会和其后的读写操作发生乱序，Linux内核保证Generalbarrier有cumulative特性(就是和ARM的DMB类似的传递性，如果在CPU1上看到A操作先于B操作，CPU2上看到B操作先于C操作，CPU3上看到C操作先于D操作；可以推断出CPU3上看到的A操作也先于D操作)，当然对一些平台上的实现，是有cumulative特性的。
+
+对应的内核接口为mb()/smp_mb()
+
+- 隐含的barrier
+
+spinlock/unlock
+
+其隐含的memorybarrier和ARM的Load acquire-Store release类似：Lock确保program order在其后的内存操作，不会先于Lock操作完成；Unlock确保program order在其前的内存操作，不会后于UnLock操作完成。需要说明的是：Lock操作的memory barrier保证只有Lock成功后才能保证。
+
+A LOCK B UNLOCK C
+
+B、C中的操作后于LOCK操作完成，而A、B中的操作先于UNLOCK完成。A中的操作可以在B中的操作之后，但是不能越过UNLOCK到C中的操作之后；同样，C中的操作可以越过UNLOCK到B中的操作之前，但是不能越过LOCK到A中的插在哦之前。
+
+irq disable/enable
+
+相当于compiler_barrier()
+
+sleep/wakeup func
+
+其隐含了smp_mb()，其隐含的smp_mb()其实是set_current_state()中调用的set_mb接口，其它的使用了该接口的API也都隐含了smp_mb()。
+
+atomic操作
+
+一些原子操作具有隐含的memorybarrier，具体查看对应接口的内核实现。
+
+- MMIO write barrier
+
+对应的内核接口：mmiowb()
+
+原因：LOCK/UNLOCK等构成的临界区中执行的对外设的写操作虽然CPU发起操作的顺序得到了保证，但是到达外设后，还是可能会混在一起。比如：
+
+    #+begin_quote
+    CPU 1               CPU 2
+
+    ===============================
+
+    spin_lock(Q)
+
+    writel(0, ADDR)
+
+    writel(1, DATA);
+
+    spin_unlock(Q);
+
+                    spin_lock(Q);
+
+                    writel(4, ADDR);
+
+                    writel(5, DATA);
+
+                    spin_unlock(Q);
+    #+end_quote
+
+到达PCI bridge后的顺序可能为：
+
+STORE *ADDR = 0, STORE *ADDR = 4, STORE *DATA = 1, STORE *DATA = 5。
+
+这是因为一些体系结构(比如IA64，典型的X86-64和ARM其实没有这个需求)的PCI bridge不参与cache coherence protocol处理而导致了乱序，为了确保想要的临界区，需要在临界区的最后，添加mmiowb()，确保系统中在mmiowb()之前发起的所有wrtie操作在其后发起的write操作之前完成。由于readl操作也能确保写操作完成，故如果在UNLOCK之前有readl操作，效果和mmiowb()一样，并且不要求readl和writel访问的地址一样。
+
+因此，如果需要保证writel的相关顺序，且临界区的最后一个操作是writel不是readl,需要使用mmiowb()来确保执行顺序，比如由LOCK/UNLOCK操作构成的临界区，对应使用IRQ-DISABLE/ENABLE完成和ISR串行化的操作的时候也可能需要使用mmiowb()。
+
+--------------------- 
+
+作者：phenix_lord
+
+来源：CSDN 
+
+原文：https://blog.csdn.net/phenix_lord/article/details/50545364 
+
+版权声明：本文为博主原创文章，转载请附上博文链接！
+
+* Linux内核同步机制之三
+
+https://www.wowotech.net/kernel_synchronization/memory-barrier.html
+
+一、前言
+
+我记得以前上学的时候大家经常说的一个词汇叫做所见即所得，有些编程工具是所见即所得的，给程序员带来极大的方便。对于一个c程序员，我们的编写的代码能所见即所得吗？我们看到的c程序的逻辑是否就是最后CPU运行的结果呢？很遗憾，不是，我们的”所见”和最后的执行结果隔着：
+
+1、编译器
+
+2、CPU取指执行
+
+编译器将符合人类思考的逻辑（c代码）翻译成了符合CPU运算规则的汇编指令，编译器了解底层CPU的思维模式，因此，它可以在将c翻译成汇编的时候进行优化（例如内存访问指令的重新排序），让产出的汇编指令在CPU上运行的时候更快。然而，这种优化产出的结果未必符合程序员原始的逻辑，因此，作为程序员，作为c程序员，必须有能力了解编译器的行为，并在通过内嵌在c代码中的memory
+barrier来指导编译器的优化行为（这种memory
+barrier又叫做优化屏障，Optimization
+barrier），让编译器产出即高效，又逻辑正确的代码。
+
+CPU的核心思想就是取指执行，对于in-order的单核CPU，并且没有cache（这种CPU在现实世界中还存在吗？），汇编指令的取指和执行是严格按照顺序进行的，也就是说，汇编指令就是所见即所得的，汇编指令的逻辑被严格的被CPU执行。然而，随着计算机系统越来越复杂（多核、cache、superscalar、out-of-order），使用汇编指令这样贴近处理器的语言也无法保证其被CPU执行的结果的一致性，从而需要程序员（看，人还是最不可以替代的）告知CPU如何保证逻辑正确。
+
+综上所述，memory barrier是一种保证内存访问顺序的一种方法，让系统中的HW
+block（各个cpu、DMA controler、device等）对内存有一致性的视角。
+
+ 
+
+二、不使用memory barrier会导致问题的场景
+
+1、编译器的优化
+
+我们先看下面的一个例子：
+
+#+begin_quote
+  preempt_disable（）
+
+  临界区
+
+  preempt_enable
+#+end_quote
+
+有些共享资源可以通过禁止任务抢占来进行保护，因此临界区代码被preempt_disable和preempt_enable给保护起来。其实，我们知道所谓的preempt enable和disable其实就是对当前进程的struct thread_info中的preempt_count进行加一和减一的操作。具体的代码如下：
+
+#+begin_src C
+  #define preempt_disable()			\
+    do {						\
+      preempt_count_inc();			\
+      barrier();					\
+    } while (0)
+#+end_src
+
+linux kernel中的定义和我们的想像一样，除了barrier这个优化屏障。barrier就象是c代码中的一个栅栏，将代码逻辑分成两段，barrier之前的代码和barrier之后的代码在经过编译器编译后顺序不能乱掉。也就是说，barrier之后的c代码对应的汇编，不能跑到barrier之前去，反之亦然。之所以这么做是因为在我们这个场景中，如果编译为了榨取CPU的performace而对汇编指令进行重排，那么临界区的代码就有可能位于preempt_count_inc之外，从而起不到保护作用。
+
+现在，我们知道了增加barrier的作用，问题来了，barrier是否够呢？对于multi-core的系统，只有当该task被调度到该CPU上执行的时候，该CPU才会访问该task的preempt count，因此对于preempt enable和disable而言，不存在多个CPU同时访问的场景。但是，即便这样，如果CPU是乱序执行（out-of-order excution）的呢？其实，我们也不用担心，正如前面叙述的，preempt count这个memory实际上是不存在多个cpu同时访问的情况，因此，它实际上会本cpu的进程上下文和中断上下文访问。能终止当前thread执行preempt_disable的只有中断。为了方便描述，我们给代码编址，如下：
+
+当发生中断的时候，硬件会获取当前PC值，并精确的得到了发生指令的地址。有两种情况：
+
+（1）在地址a发生中断。对于out-of-order的CPU，临界区指令1已经执行完毕，preempt_disable正在pipeline中等待执行。由于是在a地址发生中断，也就是preempt_disable地址上发生中断，对于硬件而言，它会保证a地址之前（包括a地址）的指令都被执行完毕，并且a地址之后的指令都没有执行。因此，在这种情况下，临界区指令1的执行结果被抛弃掉，因此，实际临界区指令不会先于preempt_disable执行
+
+（2）在地址a＋4发生中断。这时候，虽然发生中断的那一刻的地址上的指令（临界区指令1）已经执行完毕了，但是硬件会保证地址a＋4之前的所有的指令都执行完毕，因此，实际上CPU会执行完preempt_disable，然后跳转的中断异常向量执行。
+
+上面描述的是优化屏障在内存中的变量的应用，下面我们看看硬件寄存器的场景。一般而言，串口的驱动都会包括控制台部分的代码，例如：
+
+#+begin_src C
+  static struct console xx_serial_console = {
+    ......
+    .write = xx_serial_console_write,
+    ......
+  };
+#+end_src
+
+如果系统enable了串口控制台，那么当你的驱动调用printk的时候，实际上最终是通过console的write函数输出到了串口控制台。而这个console
+write的函数可能会包含下面的代码：
+
+#+begin_quote
+  do {
+  获取TX FIFO状态寄存器
+  barrier();
+  } while (TX FIFO没有ready);  写TX FIFO寄存器;
+#+end_quote
+
+对于某些CPU archtecture而言（至少ARM是这样的），外设硬件的IO地址也被映射到了一段内存地址空间，对编译器而言，它并不知道这些地址空间是属于外设的。因此，对于上面的代码，如果没有barrier的话，获取TX FIFO状态寄存器的指令可能和写TX FIFO寄存器指令进行重新排序，在这种情况下，程序逻辑就不对了，因为我们必须要保证TX FIFO ready的情况下才能写TX FIFO寄存器。
+
+对于multi core的情况，上面的代码逻辑也是OK的，因为在调用console write函数的时候，要获取一个console semaphore，确保了只有一个thread进入，因此，console write的代码不会在多个CPU上并发。和preempt count的例子一样，我们可以问同样的问题，如果CPU是乱序执行（out-of-order excution）的呢？barrier只是保证compiler输出的汇编指令的顺序是OK的，不能确保CPU执行时候的乱序。 对这个问题的回答来自ARM architecture的内存访问模型：对于program order是A1-->A2的情况（A1和A2都是对Device或是Strongly-ordered的memory进行访问的指令），ARM保证A1也是先于A2执行的。因此，在这样的场景下，使用barrier足够了。 对于X86也是类似的，虽然它没有对IO space采样memory mapping的方式，但是，X86的所有操作IO端口的指令都是被顺执行的，不需要考虑memory access order。   
+
+2、cpu architecture和cache的组织
+
+注：本章节的内容来自对Paul E. McKenney的Why memory barriers文档理解，更细致的内容可以参考该文档。这个章节有些晦涩，需要一些耐心。作为一个c程序员，你可能会抱怨，为何设计CPU的硬件工程师不能屏蔽掉memory barrier的内容，让c程序员关注在自己需要关注的程序逻辑上呢？本章可以展开叙述，或许能解决一些疑问。
+
+（1）基本概念
+
+在[[https://www.wowotech.net/basic_subject/memory-hierarchy.html][The Memory Hierarchy]]文档中，我们已经了解了关于cache一些基础的知识，一些基础的内容，这里就不再重复了。我们假设一个多核系统中的cache如下：
+
+[[https://www.wowotech.net/content/uploadfile/201411/e35f2f4793d734a566d1d230d1b83b4620141114112002.gif][[[https://www.wowotech.net/content/uploadfile/201411/6ae345c874b4a99f06046f32377c7af320141114112003.gif]]]]
+
+我们先了解一下各个cpu cache line状态的迁移过程：
+
+（a）我们假设在有一个memory中的变量为多个CPU共享，那么刚开始的时候，所有的CPU的本地cache中都没有该变量的副本，所有的cacheline都是invalid状态。
+
+（b）因此当cpu 0 读取该变量的时候发生cache miss（更具体的说叫做cold miss或者warmup miss）。当该值从memory中加载到chache 0中的cache line之后，该cache line的状态被设定为shared，而其他的cache都是Invalid。
+
+（c）当cpu 1 读取该变量的时候，chache 1中的对应的cache line也变成shared状态。其实shared状态就是表示共享变量在一个或者多个cpu的cache中有副本存在。既然是被多个cache所共享，那么其中一个CPU就不能武断修改自己的cache而不通知其他CPU的cache，否则会有一致性问题。
+
+（d）总是read多没劲，我们让CPU n对共享变量来一个load and store的操作。这时候，CPU n发送一个read invalidate命令，加载了Cache n的cache line，并将状态设定为exclusive，同时将所有其他CPU的cache对应的该共享变量的cacheline设定为invalid状态。正因为如此，CPU n实际上是独占了变量对应的cacheline（其他CPU的cacheline都是invalid了，系统中就这么一个副本），就算是写该变量，也不需要通知其他的CPU。CPU随后的写操作将cacheline设定为modified状态，表示cache中的数据已经dirty，和memory中的不一致了。modified状态和exclusive状态都是独占该cacheline，但是modified状态下，cacheline的数据是dirty的，而exclusive状态下，cacheline中的数据和memory中的数据是一致的。当该cacheline被替换出cache的时候，modified状态的cacheline需要write back到memory中，而exclusive状态不需要。
+
+（e）在cacheline没有被替换出CPU n的cache之前，CPU 0再次读该共享变量，这时候会怎么样呢？当然是cache miss了（因为之前由于CPU n写的动作而导致其他cpu的cache line变成了invalid，这种cache miss叫做communiction miss）。此外，由于CPU n的cache line是modified状态，它必须响应这个读得操作（memory中是dirty的）。因此，CPU 0的cacheline变成share状态（在此之前，CPU n的cache line应该会发生write back动作，从而导致其cacheline也是shared状态）。当然，也可能是CPU n的cache line不发生write back动作而是变成invalid状态，CPU 0的cacheline变成modified状态，这和具体的硬件设计相关。
+
+ 
+
+（2）Store buffer
+
+我们考虑另外一个场景：在上一节中step e中的操作变成CPU 0对共享变量进行写的操作。这时候，写的性能变得非常的差，因为CPU 0必须要等到CPU n上的cacheline 数据传递到其cacheline之后，才能进行写的操作（CPU n上的cacheline 变成invalid状态，CPU 0则切换成exclusive状态，为后续的写动作做准备）。而从一个CPU的cacheline传递数据到另外一个CPU的cacheline是非常消耗时间的，而这时候，CPU 0的写的动作只是hold住，直到cacheline的数据完成传递。而实际上，这样的等待是没有意义的，因此，这时候cacheline的数据仍然会被覆盖掉。为了解决这个问题，多核系统中的cache修改如下：
+
+[[https://www.wowotech.net/content/uploadfile/201411/a872a1863fec02585bb786a5c382d3eb20141114112005.gif][[[https://www.wowotech.net/content/uploadfile/201411/4f1fe5220dacaa8ac8f18f4efd43b5b020141114112007.gif]]]]
+
+这样，问题解决了，写操作不必等到cacheline被加载，而是直接写到store buffer中然后欢快的去干其他的活。在CPU n的cacheline把数据传递到其cache 0的cacheline之后，硬件将store buffer中的内容写入cacheline。
+
+虽然性能问题解决了，但是逻辑错误也随之引入，我们可以看下面的例子：
+
+我们假设a和b是共享变量，初始值都是0，可以被cpu0和cpu1访问。cpu 0的cache中保存了b的值（exclusive状态），没有a的值，而cpu 1的cache中保存了a的值，没有b的值，cpu 0执行的汇编代码是（用的是ARM汇编，没有办法，其他的都不是那么熟悉）：
+
+#+begin_quote
+  ldr     r2, [pc, #28]   -------------------------- 取变量a的地址  ldr
+      r4, [pc, #20]   -------------------------- 取变量b的地址  mov    
+  r3, #1 str     r3, [r2]           --------------------------a=1 str
+      r3, [r4]           --------------------------b=1
+#+end_quote
+
+CPU 1执行的代码是：
+
+#+begin_quote
+               ldr    
+  r2, [pc, #28]   -------------------------- 取变量a的地址
+
+               ldr    
+  r3, [pc, #20]  -------------------------- 取变量b的地址  start:    
+  ldr     r3, [r3]          -------------------------- 取变量b的值 
+              cmp     r3, #0          ------------------------
+  b的值是否等于0？              beq     start
+             ------------------------ 等于0的话跳转到start
+
+              ldr    
+  r2, [r2]          -------------------------- 取变量a的值
+#+end_quote
+
+当cpu 1执行到--取变量a的值--这条指令的时候，b已经是被cpu0修改为1了，这也就是说a＝1这个代码已经执行了，因此，从汇编代码的逻辑来看，这时候a值应该是确定的1。然而并非如此，cpu 0和cpu 1执行的指令和动作描述如下：
+
+对于硬件，CPU不清楚具体的代码逻辑，它不可能直接帮助软件工程师，只是提供一些memory barrier的指令，让软件工程师告诉CPU他想要的内存访问逻辑顺序。这时候，cpu 0的代码修改如下：
+
+#+begin_quote
+  ldr     r2, [pc, #28]   -------------------------- 取变量a的地址  ldr
+      r4, [pc, #20]   -------------------------- 取变量b的地址  mov    
+  r3, #1 str     r3, [r2]           --------------------------a=1
+
+  确保清空store buffer的memory barrier instruction str    
+  r3, [r4]           --------------------------b=1
+#+end_quote
+
+这种情况下，cpu 0和cpu 1执行的指令和动作描述如下：
+
+由于增加了memory barrier，保证了a、b这两个变量的访问顺序，从而保证了程序逻辑。
+
+ 
+
+（3）Invalidate Queue
+
+我们先回忆一下为何出现了stroe buffer：为了加快cache miss状态下写的性能，硬件提供了store buffer，以便让CPU先写入，从而不必等待invalidate ack（这些交互是为了保证各个cpu的cache的一致性）。然而，store buffer的size比较小，不需要特别多的store命令（假设每次都是cache miss）就可以将store buffer填满，这时候，没有空间写了，因此CPU也只能是等待invalidate ack了，这个状态和memory barrier指令的效果是一样的。
+
+怎么解决这个问题？CPU设计的硬件工程师对性能的追求是不会停歇的。我们首先看看invalidate ack为何如此之慢呢？这主要是因为cpu在收到invalidate命令后，要对cacheline执行invalidate命令，确保该cacheline的确是invalid状态后，才会发送ack。如果cache正忙于其他工作，当然不能立刻执行invalidate命令，也就无法会ack。
+
+怎么破？CPU设计的硬件工程师提供了下面的方法：
+
+[[https://www.wowotech.net/content/uploadfile/201411/46e1bbd0ba094941caf23050e1db2d2d20141114112008.gif][[[https://www.wowotech.net/content/uploadfile/201411/b4c569d306427421b5b657fdcfce3cf120141114112010.gif]]]]
+
+Invalidate Queue这个HW
+block从名字就可以看出来是保存invalidate请求的队列。其他CPU发送到本CPU的invalidate命令会保存于此，这时候，并不需要等到实际对cacheline的invalidate操作完成，CPU就可以回invalidate
+ack了。
+
+同store
+buffer一样，虽然性能问题解决了，但是对memory的访问顺序导致的逻辑错误也随之引入，我们可以看下面的例子（和store
+buffer中的例子类似）：
+
+我们假设a和b是共享变量，初始值都是0，可以被cpu0和cpu1访问。cpu
+0的cache中保存了b的值（exclusive状态），而CPU 1和CPU
+0的cache中都保存了a的值，状态是shared。cpu 0执行的汇编代码是：
+
+#+begin_quote
+  ldr     r2, [pc, #28]   -------------------------- 取变量a的地址  ldr
+      r4, [pc, #20]   -------------------------- 取变量b的地址  mov    
+  r3, #1 str     r3, [r2]           --------------------------a=1
+
+  确保清空store buffer的memory barrier instruction str    
+  r3, [r4]           --------------------------b=1
+#+end_quote
+
+CPU 1执行的代码是：
+
+#+begin_quote
+               ldr    
+  r2, [pc, #28]   -------------------------- 取变量a的地址
+
+               ldr    
+  r3, [pc, #20]  -------------------------- 取变量b的地址  start:    
+  ldr     r3, [r3]          -------------------------- 取变量b的值 
+              cmp     r3, #0          ------------------------
+  b的值是否等于0？              beq     start
+             ------------------------ 等于0的话跳转到start
+
+              ldr    
+  r2, [r2]          -------------------------- 取变量a的值
+#+end_quote
+
+这种情况下，cpu 0和cpu 1执行的指令和动作描述如下：
+
+可怕的memory misorder问题又来了，都是由于引入了invalidate
+queue引起，看来我们还需要一个memory barrier的指令，我们将程序修改如下：
+
+#+begin_quote
+               ldr    
+  r2, [pc, #28]   -------------------------- 取变量a的地址
+
+               ldr    
+  r3, [pc, #20]  -------------------------- 取变量b的地址  start:    
+  ldr     r3, [r3]          -------------------------- 取变量b的值 
+              cmp     r3, #0          ------------------------
+  b的值是否等于0？              beq     start
+             ------------------------ 等于0的话跳转到start
+
+  确保清空invalidate queue的memory barrier instruction
+
+              ldr    
+  r2, [r2]          -------------------------- 取变量a的值
+#+end_quote
+
+这种情况下，cpu 0和cpu 1执行的指令和动作描述如下：
+
+  由于增加了memory
+barrier，保证了a、b这两个变量的访问顺序，从而保证了程序逻辑。
+
+ 
+
+三、linux kernel的API
+
+linux kernel的memory barrier相关的API列表如下：
+
+barrier()这个接口和编译器有关，对于gcc而言，其代码如下：
+
+#+begin_quote
+  #define barrier() __asm__ __volatile__("": : :"memory")
+#+end_quote
+
+这里的__volatile__主要是用来防止编译器优化的。而这里的优化是针对代码块而言的，使用嵌入式汇编的代码分成三块：
+
+1、嵌入式汇编之前的c代码块
+
+2、嵌入式汇编代码块
+
+3、嵌入式汇编之后的c代码块
+
+这里__volatile__就是告诉编译器：不要因为性能优化而将这些代码重排，我需要清清爽爽的保持这三块代码块的顺序（代码块内部是否重排不是这里的__volatile__管辖范围了）。
+
+barrier中的嵌入式汇编中的clobber
+list没有描述汇编代码对寄存器的修改情况，只是有一个memory的标记。我们知道，clober
+list是gcc和gas的接口，用于gas通知gcc它对寄存器和memory的修改情况。因此，这里的memory就是告知gcc，在汇编代码中，我修改了memory中的内容，嵌入式汇编之前的c代码块和嵌入式汇编之后的c代码块看到的memory是不一样的，对memory的访问不能依赖于嵌入式汇编之前的c代码块中寄存器的内容，需要重新加载。
+
+优化屏障是和编译器相关的，而内存屏障是和CPU
+architecture相关的，当然，我们选择ARM为例来描述内存屏障。
+
+ 
+
+四、内存屏障在ARM中的实现
+
+TODO
+
+原创文章，转发请注明出处。蜗窝科技
+
+[[https://www.wowotech.net/kernel_synchronization/memory-barrier.html]]
+
+标签:[[https://www.wowotech.net/tag/Memory][Memory]][[https://www.wowotech.net/tag/%E5%86%85%E5%AD%98%E5%B1%8F%E9%9A%9C][内存屏障]][[https://www.wowotech.net/tag/barrier][barrier]]
