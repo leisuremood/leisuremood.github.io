@@ -1,4 +1,4 @@
-#+OPTIONS: toc:1 ^:false
+#+OPTIONS: toc:nil ^:nil
 #+TITLE: 佛经小故事
 #+begin_export md
 ---
@@ -9,7 +9,7 @@ tags:
       - 佛学
 ---
 #+end_export
-
+#+TOC: headlines 1
 * 苏卡的故事
   :PROPERTIES:
   :CUSTOM_ID: 苏卡的故事

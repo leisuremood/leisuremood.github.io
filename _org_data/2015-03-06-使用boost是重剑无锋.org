@@ -1,4 +1,13 @@
-#+OPTIONS: toc:t ^:false
+#+OPTIONS: toc:t ^:nil
+#+begin_export md
+---
+layout: post
+title: "使用boost是重剑无锋"
+date: 2015-03-06
+tags: 
+    - it
+---
+#+end_export
 
 * 使用boost执行base64解码
 https://microcai.org/2013/03/28/boost-base64.html
@@ -16,9 +25,14 @@ Boost 提供了一个叫 boost::archive::iterators::binary/from/base64
 
 还应该外面再套一层 archive::iterators::transform_width 以 6bit
 为单位转换到 8bit。
-
-#+begin_src C
-typedef archive::iterators::transform_width<archive::iterators::binary_from_base64, 8, 6, char> base64decodeIterator;
+#+NAME: b64
+#+begin_src C -r
+  typedef archive::iterators::transform_width<
+  archive::iterators::binary_from_base64,
+    8,
+    6,
+    char>
+    base64decodeIterator;
 #+end_src
 
 那么这个就应该是用于解码的 base64decodeIterator
@@ -43,11 +57,10 @@ boost::filter_iterator 需要使用一个模板参数，参数是一个过滤用
   };
 #+end_src
 
-然后使用 boost::filter/iteratorbase64/char, const char*> 作为
-archive::iterators::binaryfrom_base64 的迭代器，就形如
+然后使用 boost::filter/iteratorbase64/char, const char*> 作为 archive::iterators::binaryfrom_base64 的迭代器，就形如
 
 #+begin_src C
-  typedef archive::iterators::transform_width<archive::iterators::binary_from_base64, 8, 6, char> base64decodeIterator;
+  typedef archive::iterators::transform_width<archive::iterators::binary_from_base64, 8, 6, char> base64decodeIterator; /*  */
 #+end_src
 
 然后只要使用 base64decodeIterator(base64string) ，然后执行 ++
@@ -64,8 +77,7 @@ std::string result(base64Iterator(str.begin()), base64Iterator(str.end()));
 
 https://blog.163.com/ecy_fu/blog/static/4445126200911291022174/
 
-  POD即"Plain Old Data"，
-它表示一种简单的类型，这种类型没有使用指针，可以直接在两个对象之间直接赋值而没有什么隐患。系统中会存在大量的POD类型，比如保存程序运行的各种状 态参数的结构体，比如表示坐标点的简单类，这些POD类型在序列化时是可以直接进行内存存取的，这样不仅节省空间，而且效率也更高。
+  POD即"Plain Old Data"， 它表示一种简单的类型，这种类型没有使用指针，可以直接在两个对象之间直接赋值而没有什么隐患。系统中会存在大量的POD类型，比如保存程序运行的各种状 态参数的结构体，比如表示坐标点的简单类，这些POD类型在序列化时是可以直接进行内存存取的，这样不仅节省空间，而且效率也更高。
 
 Boost Serialization库提供多种方法以直接保存POD类型。在看Boost Serialization官 方文档中，我最早看到Bitwise Serialization这个traits，我以为使用"BOOST_IS_BITWISE_SERIALIZABLE(my_class)"声明一 下，以后遇到形如"ar& my_class"将直接进行内存拷贝，这是最理想的使用方法，可是这样用是通不过编译的，编译时会提示my_class不存在serialize方法。
 
@@ -89,43 +101,66 @@ Boost Serialization库提供多种方法以直接保存POD类型。在看Boost S
   #include
   #include
 
-  #include #include
+  #include
+  #include
 
-  //该类是典型的POD类型 class Position { public:     double m_lat;    
-  double m_lon;     double m_height;
+  //该类是典型的POD类型
+  class Position {
+  public:
+      double m_lat;
+      double m_lon;
+      double m_height;
 
-      Position()     {     };
+      Position(){};
 
-      Position(double lon, double lat, double hi)     {         m_lon =
-  lon;         m_lat = lat;         m_height = hi;     } };
+      Position(double lon, double lat, double hi)
+      {
+	  m_lon    = lon;
+	  m_lat    = lat;
+	  m_height = hi;
+      }
+  };
 
-  class Test { public:     void SetPosition(const Position& pos)     {    
-      position = pos;     }
+  class Test {
+  public:
+      void SetPosition(const Position& pos) { position = pos; }
 
-      Test()     {     };
+      Test(){};
 
-      template     void save(Archive & ar, const unsigned int version)
-  const     {         //对于POD类型直接序列化        
-  ar.save_binary(&position, sizeof(Position));     }
+      template void save(Archive& ar, const unsigned int version) const
+      {   //对于POD类型直接序列化
+	  ar.save_binary(&position, sizeof(Position));
+      }
 
-      template     void load(Archive & ar, const unsigned int version)    
-  {         ar.load_binary(&position, sizeof(Position));     }
+      template void load(Archive& ar, const unsigned int version)
+      {
+	  ar.load_binary(&position, sizeof(Position));
+      }
 
-      //将save和load分开     BOOST_SERIALIZATION_SPLIT_MEMBER()
+      //将save和load分开
+      BOOST_SERIALIZATION_SPLIT_MEMBER()
 
-  public:     Position position; };
+  public:
+      Position position;
+  };
 
-  int main() {     Test test;
+  int main()
+  {
+      Test test;
 
       Position pos(104.12, 40.23, 1000);
 
       test.SetPosition(pos);
 
-      {         ofstream ofs("test.dat");
+      {
+	  ofstream ofs("test.dat");
 
 	  boost::archive::text_oarchive oa(ofs);
 
-	  oa << test;     }         {         ifstream ifs("test.dat");
+	  oa << test;
+      }
+      {
+	  ifstream ifs("test.dat");
 
 	  boost::archive::text_iarchive ia(ifs);
 
@@ -133,20 +168,24 @@ Boost Serialization库提供多种方法以直接保存POD类型。在看Boost S
 
 	  ia >> test2;
 
-	  cout << test2.position.m_lon << endl;     }
+	  cout << test2.position.m_lon << endl;
+      }
+  };
+  // 使用第二种方法只需使用下面这段代码替换上面Test类的声明即可。
+  class Test {
+  public:
+      void SetPosition(const Position& pos) { position = pos; }
 
-  };        使用第二种方法只需使用下面这段代码替换上面Test类的声明即可。
-  class Test { public:     void SetPosition(const Position& pos)     {    
-      position = pos;     }
+      Test(){};
 
-      Test()     {     };
-
-      template     void serialize(Archive & ar, const unsigned int
-  version)     {         //优势非常明显         ar&
-  boost::serialization::binary_object((void*)&position, sizeof(Position));
+      template void serialize(Archive& ar, const unsigned int version)
+      {   //优势非常明显
+	  ar& boost::serialization::binary_object((void*)&position, sizeof(Position));
       }
 
-  public:     Position position; };
+  public:
+      Position position;
+  };
 #+end_src
 
 * 可变长度的网络消息数据打包
@@ -182,7 +221,10 @@ https://blog.csdn.net/gddsky/article/details/5021388
 5. 为了做到使用更加方便，简单做了MsgPack与MsgUnpack类来做打包与解包工作。
 
 #+begin_src C
-  //msg_binary_iarchive.h
+  
+  /**************************************************/ 
+  /***************msg_binary_iarchive.h ***********************************/ 
+
   #pragma once
   // 这文件内容是直接复制的boost的binary_iarchive.hpp的内容做了点儿修改
 
@@ -271,10 +313,9 @@ https://blog.csdn.net/gddsky/article/details/5021388
   // required by export
   BOOST_SERIALIZATION_REGISTER_ARCHIVE(boost::archive::msg_binary_iarchive)
   BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION(boost::archive::msg_binary_iarchive)
-#+end_src
+  /**************************************************/ 
+  /**********msg_binary_oarchive.h****************************************/ 
 
-#+begin_src C
-  //msg_binary_oarchive.h
   #pragma once
   // 这文件内容是直接复制的boost的binary_oarchive.hpp的内容做了点儿修改
 
@@ -333,11 +374,9 @@ https://blog.csdn.net/gddsky/article/details/5021388
   // required by export
   BOOST_SERIALIZATION_REGISTER_ARCHIVE(boost::archive::msg_binary_oarchive)
   BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION(boost::archive::msg_binary_oarchive)
-#+end_src
+  /**************************************************/ 
+  /**********************MsgBinaryArchive.h****************************/ 
 
- 
-#+begin_src C
-  //MsgBinaryArchive.h
   #pragma once
 
   #include <strstream>
@@ -584,8 +623,6 @@ https://blog.csdn.net/gddsky/article/details/5021388
 	  boost::archive::msg_binary_iarchive 	_ia;
   };
 
-
-
   /* 例子
   ===============================================================================
   // 定义一个有两个成员变量的消息结构
@@ -642,3 +679,33 @@ https://blog.csdn.net/gddsky/article/details/5021388
   }
   ,*/
 #+end_src
+
+* 一个重剑无锋大巧不工
+https://www.newsmth.net/nForum/#!article/CPlusPlus/374960 
+
+https://github.com/rockeet/nark-rpc
+
+RPC(Remote Procedure Call) on top of nark-serialization
+
+https://github.com/rockeet/nark-serialization
+
+An easy, fast, small, portable C++ object serialization framework
+
+Features:
+
+  Declarative syntax, Easy to use, Easy to integrate
+
+  Fast at runtime, Fast at compile time
+
+  Serialized data is small, Compiled code is small
+
+  Support STL containers & types
+
+  Can serialize to BigEndian/LittleEndian in any platform
+
+  Support variant int/uint encoding
+
+  Optional serialization version control
+
+  More and more...
+

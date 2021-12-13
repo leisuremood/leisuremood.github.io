@@ -1,4 +1,4 @@
-#+OPTIONS: toc:1 ^:nil
+#+OPTIONS: toc:1 ^:nil ^:nil
 #+begin_export md
 ---
 layout: post
@@ -9,6 +9,133 @@ tags:
 ---
 #+end_export
 
+* 从std::cout和endl说起
+https://www.cnblogs.com/lihaozy/archive/2012/05/09/2491791.html
+https://blog.csdn.net/hityct1/article/details/4082832
+
+问题是这样的... 相信下面这个程序凡是会写C++程序的同仁都认得，估计学会的第一个C++程序就是它了吧：
+#+begin_src C
+  #include <iostream>
+int main(int argc, char *argv[])
+{
+         std::cout << "Hello, World." << std::endl;
+         return 0;
+}
+#+end_src
+
+我会写一点C语言的程序，于是在写这个程序的时候就对很多东西”想当然”了。比如对于操作符”<<"，在心里一直是与C语言的printf()函数对应起来的------认为它就是封装进了ostream对象中的printf()函数。既然是这样，那么对于"[[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]]"，自然就"想当然”地认为它是”n”了。
+
+突然有一天，在Visual Studio弹出的代码自动完成窗口中发现，[[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]]不是一个成员变量（如果它代表一个字符，那么理应是一个字符类型的成员变量）而是一个成员函数！大脑中立刻蹦出一个解释：或许[[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]]函数的返回值是字符”n”吧？可是这个答案存活了不到一秒钟就被否定了------如果想让一个函数执行从而得到它的返回值，应该是调用这个函数，所以写法应该是”std::[[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]]()"而不是"std::[[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]]"。写成"std::[[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]]“是将函数名放在这里,并不是在调用这个函数。哈~~脑子里的概念开始互相打架了~~ 因为问题是出在了[[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]]上，所以一直在查[[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]]的定义------结果除了发现MSDN里有个Bug之外，一无所获L
+
+*MSDN里是这样声名的：*
+
+template class<_Elem, _Tr> basic_ostream<_Elem, _Tr>& [[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]](basic_ostream<_Elem, _Tr>& _Ostr );
+
+红色标记的地方写错了:p
+
+*C++ ISO文档里是这样声名的：*
+
+template basic_ostream& [[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]](basic_ostream& os);
+
+按MSDN里模板的”写法”根本编译不过去，呵呵。 不过，MSDN里的说明还是非常有用的------Terminates a line and flushes the buffer. 可是函数的功能是”结束一行并冲洗缓冲区”，如果想执行这个功能，应该是调用这个函数、应该写[[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]]()而不是[[https://soft.zdnet.com.cn/files/list-0-0-139506-1-1.htm][endl]]啊......看来问题又绕回去了。于是这事儿就放下了。
+
+        
+今天遇到高手Sidney，又问起了这个问题。Sidney是研究过这个问题的，虽然没有给出我答案，但他提到这么一句话------"<<"操作符是被重载过的，可以接收一个函数作为参数。正好前几天我在写《深入浅出话回调》的时候写过类似的程序，经Sidney一点拨，顿时感觉豁然开朗。很快问题的答案就找到了------
+
+
+1. 先查看<iostream>的成员，找到一个全局对象cout
+
+2. 查看cout对象，发现它是ostream的一个实例
+
+3. 查看<ostream>文件说明中的“<<”操作符，有10个重载，但是没有可将函数作为参数的
+
+4. 仔细想了想，会不会是从别处继承来的呢？（操作符其实就是简写了的函数，完全可以当函数来对待）
+
+5. 查看MSDN，发现ostream是由类模板basic_ostream<char, char_traits<char> >生成的
+
+6. 查看basic_ostream<char, char_traits<char> >的说明，发现它也具有“<<”操作符，并且有15个重载。
+
+7. 其中的一个卸载形式是——
+basic_ostream& operator << ( basic_ostream& (*_Pfn)(basic_ostream&) );
+
+说明cout的<<操作符可以接受一个函数指针（函数的地址）作为参数。 这个重载正好与endl函数的声名相匹配，所以<<后面是可以跟着endl的，也就是说，cout对象的<<操作符接受到endl函数的地址后会在后台调用endl函数，而endl函数会结束当前行并冲洗buffer。
+
+最后啰嗦一句——你可能会问：不是函数指针吗？为什么不写“std::cout<<&endl”而写“std::cout<<endl”呢？实际上，函数名本身就代表的是函数的地址，&endl与endl的值是一样的J
+
+
+myend函数就是模拟endl函数的。它是个全局函数。为了达到与endl一样的用法，还定义了：
+
+mystream& operator<<(mystream& (*fun)(mystream&) );
+
+#+begin_src C
+  #include "stdafx.h"//非vc编译器可去掉  
+  #include   
+  #include   
+  #include   
+
+  using namespace std;  
+
+  class mystream  
+  {   
+   private:   
+       stringstream _ss;  
+       string _str;   
+   public:  
+       friend mystream& myend(mystream& ms); //5  
+       friend ostream& operator <<(ostream& os, const mystream& ms); //6  
+   public:  
+       mystream& operator<< (const int& val ) //1  
+       {  
+	   _ss <<val;  
+	   return *this;  
+       }  
+   
+       mystream& operator<< (const char* s ) //2  
+       {  
+	   _ss <<s;  
+	   return *this;  
+       }  
+   
+       mystream& operator<< (const double& val ) //3  
+       {  
+	   _ss <<val;  
+	   return *this;  
+       }  
+   
+       mystream& operator<<(mystream& (*fun)(mystream&) ); //4  
+   };   
+   
+   mystream& myend(mystream& ms) //这个是模仿std::endl函数  
+   {     
+       ms_str = ms_ssstr(); //没做什么，仅仅是给ms_str赋值。  
+   
+       return ms;  
+   }  
+   
+   ostream& operator <<(ostream& os, const mystream& ms)  
+   {  
+       os<<ms_str;  
+       return os;  
+   }  
+   
+   mystream& mystream::operator<<(mystream& (*fun)(mystream&) )  
+   {     
+	   assert(NULL != fun);  
+	   return ((*fun)(*this));  
+   }  
+   
+   int main()  
+   {  
+       mystream mystr;  
+    
+       mystr << 5<< "abc" << 357<< myend; //调用1，2，3；然后调用4，而4又调用5  
+       cout << mystr<<endl; //输出mystr_str到屏幕，调用6  
+   
+       return 0;  
+   }  
+#+end_src
+
+ 
 * c++11语法甜点
 
  [[https://www.cnblogs.com/cpper-kaixuan/]]

@@ -1,8 +1,8 @@
-#+options: toc:1
+#+options: toc:1 ^:nil
 #+begin_export md
 ---
 layout: post
-title: "Apk Dump 刷机"
+title: "Apk Dump 刷机-蹭网猫"
 date: 2016-03-05
 tags: 
     - it
@@ -529,3 +529,48 @@ ext4_unpacker.zip
 [[https://blog.csdn.net/kibaamor/article/details/11213823][一个简单的elf文件头查看工具]]
 
 [[https://blog.csdn.net/helloworld_ptt/article/details/79575783][Windows下的ELF文件解析代码C++]]
+
+* 蹭网猫
+
+B8000：
+#+begin_src shell
+echo "start set usb-ether..."
+setprop sys.usb.config rndis
+sleep 1
+ifconfig rndis0 10.9.8.1 netmask 255.255.255.0 up
+sleep 1
+echo 1 > /proc/sys/net/ipv4/ip_forward
+sleep 1
+iptables -P FORWARD ACCEPT
+iptables -A FORWARD -i usb0 -o wlan0 -j ACCEPT
+iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
+echo "finish setting"
+
+#+end_src
+
+HTC:
+#+begin_src shell
+echo "start set usb-ether..."
+echo 1 > /sys/class/android_usb/f_rndis/on
+sleep 1
+ifconfig usb0 10.9.9.1 netmask 255.255.255.0 up
+sleep 1
+echo 1 > /proc/sys/net/ipv4/ip_forward
+sleep 1
+iptables -P FORWARD ACCEPT
+iptables -A FORWARD -i usb0 -o wlan0 -j ACCEPT
+iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
+echo "finish setting"
+
+#+end_src
+cwm.sh，busybox设置root执行。
+
+#!/system/bin/sh
+
+#su  #刷机大师的su不太对劲，这里调用会死。
+
+echo start cwm
+
+/system/bin/sh /data/app/igo  #直接运行不行，加不上x位。
+
+echo done

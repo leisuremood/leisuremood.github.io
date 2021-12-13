@@ -1,5 +1,16 @@
-#+OPTIONS: toc:2 ^:false
+#+OPTIONS: toc:nil ^:nil
 #+SPEAKER: 于淩波居士著述
+#+begin_export md
+---
+layout: post
+title:  "人间佛陀"
+date:   2019-09-05
+tags:
+      - 佛学
+---
+#+end_export
+
+#+TOC: headlines 2
 
 * 第一讲　佛教诞生的背景
 
