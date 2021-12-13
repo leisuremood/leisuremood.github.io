@@ -1,6 +1,15 @@
-#+OPTIONS: toc:t ^:false
 #+TITLE: 禅修assets
+#+begin_export md
+---
+layout: post
+title:  "禅修assets"
+date:   2015-04-21
+tags:
+      - 佛学
+---
+#+end_export
 
+#+TOC: headlines 1
 * 慈悲峪精舍的博客
 
 https://blog.sina.com.cn/u/5774554967
@@ -10,7 +19,7 @@ https://www.nanchuanfofa.com/beijingcibeiyujianjie/
 
 慈悲峪精舍传承马哈希禅法薪火，先修慈心禅培养定力，再修观禅获得智慧，以生活禅培育正念不间断。
 
-慈悲峪精舍常住维摩那菩提，2013年皈依缅甸马哈希体系禅师Sayadaw U DhammaPiya（ 中译 敬法西亚多），2014年和2015年跟随缅甸马哈希体系禅师 因德嘉西亚多即洽密棉西亚多学习马哈希禅法。
+慈悲峪精舍常住维摩那菩提，2013年皈依缅甸马哈希体系禅师Sayadaw U DhammaPiya（中译敬法西亚多），2014年和2015年跟随缅甸马哈希体系禅师因德嘉西亚多即洽密棉西亚多学习马哈希禅法。
 
 2015年雨安居结束时，因德嘉西亚多认可维摩那菩提具备在中国大陆指导马哈希禅法的能力。
 
@@ -47,3 +56,6 @@ https://whatthebuddhataught.cn/About_us/
 老师每周日都会举办2小机的线上禅修，1小时静坐，1小时问答，气氛非常好，非常推荐大家在线上一起与朱老师共修！
 
 微信号：zhiyuan0789
+
+* 南传上部座
+https://www.360doc3.net/articlenew/344130543.html
