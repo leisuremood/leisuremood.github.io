@@ -1,4 +1,4 @@
-#+OPTIONS: toc:1 ^:false
+#+OPTIONS: toc:1 ^:nil
 #+begin_export md
 ---
 layout: post
