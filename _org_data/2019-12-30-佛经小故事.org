@@ -1,5 +1,14 @@
 #+OPTIONS: toc:1 ^:false
 #+TITLE: 佛经小故事
+#+begin_export md
+---
+layout: post
+title:  "佛经小故事"
+date:   2019-12-30
+tags:
+      - 佛学
+---
+#+end_export
 
 * 苏卡的故事
   :PROPERTIES:
