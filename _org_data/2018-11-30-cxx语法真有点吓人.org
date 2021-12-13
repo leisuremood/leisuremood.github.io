@@ -1,8 +1,8 @@
-#+OPTIONS: toc:1
+#+OPTIONS: toc:1 ^:false
 #+begin_export md
 ---
 layout: post
-title: "c++语法真有点吓人"
+title: "cxx语法真有点吓人"
 date: 2018-11-30
 tags: 
     - it
@@ -563,3 +563,47 @@ freed since we stored weak_ptr
   is no longer needed and die. The timer can thus check whether the task
   is still alive by making a shared pointer from the weak pointer and
   using that shared pointer, provided it isn't null.
+
+* 明白了就看看这个 is_base_of
+#+begin_src C
+  namespace details {
+    template<typename Base> std::true_type  is_base_of_test_func(const volatile Base*);
+    template<typename Base> std::false_type is_base_of_test_func(const volatile void*);
+    template<typename Base, typename Derived>
+      using pre_is_base_of = decltype(is_base_of_test_func<Base>(std::declval<Derived*>()));
+
+    template<typename Base, typename Derived>
+      using pre_is_base_of2 =
+      std::experimental::detected_or_t<std::true_type, pre_is_base_of, Base, Derived>;
+    template<typename Base, typename Derived, typename = void>
+      struct pre_is_base_of2 : public std::true_type {};
+    template<typename Base, typename Derived>
+      struct pre_is_base_of2<Base, Derived, std::void_t<pre_is_base_of<Base, Derived>>>
+      : public pre_is_base_of<Base, Derived> {};
+  }   // namespace details
+  template<typename Base, typename Derived>
+    struct is_base_of
+    : public std::conditional_t<std::is_class<Base>::value && std::is_class<Derived>::value,
+    details::pre_is_base_of2<Base, Derived>, std::false_type> {};
+  
+#+end_src
+
+[[https://stackoverflow.com/questions/27687389/how-does-void-t-work]]
+
+has_member< A >::value 首先找到的是主定义has_member< A, void >
+
+#+begin_src C
+  template< class , class = void >
+
+  struct has_member : std::false_type{ };
+#+end_src
+
+然后呢找特化：
+
+#+begin_src C
+  template< class T >
+  struct has_member< T , void_t< decltype( T::member ) > > :
+  std::true_type{ };
+#+end_src
+
+所以这个特化必须匹配has_member< A, void >， 所以要用void_t
