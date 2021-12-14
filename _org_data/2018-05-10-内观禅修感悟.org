@@ -9,7 +9,7 @@ tags:
 ---
 #+end_export
 
-#+TOC: headlines 2
+#+TOC: headlines 1
 * 内观禅修感悟不可忽略行禅
 
 ** 第一周：
