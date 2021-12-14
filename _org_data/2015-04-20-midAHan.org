@@ -1,5 +1,16 @@
-#+OPTIONS: toc:1 ^:false
+#+OPTIONS: toc:nil ^:nil
 #+TITLE: 中阿含经
+#+begin_export md
+---
+layout: post
+title:  "中阿含经.合集"
+date:   2015-04-20
+tags:
+      - 佛学
+---
+#+end_export
+
+#+TOC: headlines 1
 
 * 《中阿含经》第01卷 七法品第一（有十经）（初一日诵）
   :PROPERTIES:

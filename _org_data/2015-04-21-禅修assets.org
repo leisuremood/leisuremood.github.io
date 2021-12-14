@@ -1,3 +1,4 @@
+#+OPTIONS: toc:nil ^:nil
 #+TITLE: 禅修assets
 #+begin_export md
 ---
@@ -59,3 +60,8 @@ https://whatthebuddhataught.cn/About_us/
 
 * 南传上部座
 https://www.360doc3.net/articlenew/344130543.html
+
+* 杂阿含，中阿含 与 长阿含
+** 杂阿含: [[http://www.quanxue.cn/CT_FoJia/ZaAHan/ZaAHan01.html]]
+** [[http://www.quanxue.cn/ct_fojia/ZhongAHan/ZhongAHan01.html][中阿含]]: http://www.quanxue.cn/ct_fojia/ZhongAHan/ZhongAHan01.html
+** 长阿含
