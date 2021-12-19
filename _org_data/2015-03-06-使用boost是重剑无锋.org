@@ -1,4 +1,4 @@
-#+OPTIONS: toc:t ^:nil
+#+OPTIONS: toc:nil ^:nil
 #+begin_export md
 ---
 layout: post
@@ -9,6 +9,7 @@ tags:
 ---
 #+end_export
 
+#+TOC: headlines 1
 * 使用boost执行base64解码
 https://microcai.org/2013/03/28/boost-base64.html
 
