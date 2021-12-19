@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "gcc编译kernel-ld链接器脚本-安装Steam"
+title: "gcc编译kernel链接器脚本ld-安装Steam"
 date: 2019-08-10
 tags:
     - it
