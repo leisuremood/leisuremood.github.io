@@ -1,0 +1,25 @@
+#+options: toc:nil ^:nil
+#+begin_export md
+---
+layout: post
+title:  "基础sqlite子查询"
+date:   2015-09-01
+tags:
+      - it
+---
+#+end_export
+#+TOC: headlines 1
+
+* SQLite 3 一些基本的使用
+https://www.yiibai.com/sqlite/sqlite_sub_queries.html
+
+https://www.cnblogs.com/Mr_JinRui/archive/2010/05/12/1733662.html
+
+#+begin_src sql
+SELECT * FROM COMPANY WHERE ID IN (SELECT ID FROM COMPANY WHERE SALARY > 45000) ;
+insert into revtbl select * from revtbl;
+DROP VIEW IF EXISTS v_test;
+CREATE VIEW IF NOT EXISTS v_test AS SELECT * FROM test;
+#+end_src
+
+
