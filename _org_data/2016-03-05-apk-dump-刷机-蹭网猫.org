@@ -1,14 +1,14 @@
-#+options: toc:1 ^:nil
+#+options: toc:nil ^:nil
 #+begin_export md
 ---
 layout: post
-title: "Apk Dump 刷机-蹭网猫"
+title: "Apk Dump 刷机-蹭网猫-网盘winpe"
 date: 2016-03-05
 tags: 
     - it
 ---
 #+end_export
-
+#+TOC: headlines 1
 * dump apk
 
 首先得配好java环境， [[https://www.cnblogs.com/guxiaobei/p/8556586.html]]
@@ -275,16 +275,17 @@ so代码 [[https://www.52pojie.cn/thread-839971-1-1.html]]
    
   [[https://www.mamicode.com/info-detail-2237108.html][乐固壳分析]] 
 
-linux下使用SP_Flash_tool刷机 [[https://blog.csdn.net/alvin08/article/details/52118396]]
-
-[[https://www.needrom.com/download/how-to-setup-sp-flash-tool-linux-mtk/]]
-
  来电语音报号.apk
 [[https://www.52pojie.cn/forum.php?mod=viewthread&tid=346441]]
 
 [[https://pan.baidu.com/s/1gdKmRkB]]
 
 安装报告有毒，更改浏览器 页面。危害比较小。
+
+* linux下使用SP_Flash_tool刷机
+[[https://blog.csdn.net/alvin08/article/details/52118396]]
+
+[[https://www.needrom.com/download/how-to-setup-sp-flash-tool-linux-mtk/]]
 
 * 刷机
 
@@ -574,3 +575,24 @@ echo start cwm
 /system/bin/sh /data/app/igo  #直接运行不行，加不上x位。
 
 echo done
+
+* 网盘 winpe
+百度云上还有一个空间,用**手机号**登陆 <https://yun.baidu.com/> 
+
+包括一些winpe
+
+pan.baidu.com 有2个,用 gmail帐号登陆. 手机号一个空的.
+
+2016.12.20.FBA完整版.7z:
+
+<https://pan.baidu.com/s/1-0q4kK3JWWP6KM-UQxPK3A>
+
+
+
+自用系统安装维护用Win10PE
+2in1一枚 <https://bbs.wuyou.net/forum.php?mod=viewthread&tid=410320&extra=page%3D2>
+
+包括pe编辑工具。
+
+**https://pan.baidu.com/s/1RytqHy-\_IEaBtHHT-pIb8g密码:tdsq**
+
