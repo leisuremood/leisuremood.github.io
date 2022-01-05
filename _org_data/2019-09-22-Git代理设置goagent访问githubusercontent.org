@@ -1,4 +1,4 @@
-#+OPTIONS: toc:1 ^:nil
+#+OPTIONS: toc:nil ^:nil
 #+begin_export md
 ---
 layout: post
@@ -8,6 +8,7 @@ tags:
     - it
 ---
 #+end_export
+#+TOC: headlines 1
 
 * goagent代理github
 网上goagent教程里讲的大部分是给浏览器用的。其实goagent是监听了本地的8087端口，其实任何程序都可以利用这个端口，只要设置好即可。
@@ -92,3 +93,13 @@ ref: https://zhuanlan.zhihu.com/p/107691233
 然后 sudo systemctl restart NetworkManager.service 不用可能也可以。
 
 ping raw.githubusercontent.com
+
+* 国内加速Github的几种方案
+https://qu.js.cn/how-to-speed-github/
+** 免替换法
+#+begin_quote
+git config --global url."https://hub.fastgit.org".insteadOf https://github.com
+#+end_quote
+** raw文件下载加速
+将 raw.githubusercontent.com 替换为 raw.staticdn.net 即可加速。
+** 

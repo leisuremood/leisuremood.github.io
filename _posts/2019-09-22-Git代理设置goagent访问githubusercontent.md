@@ -9,12 +9,13 @@ tags:
 
 # Table of Contents
 
-1.  [goagent代理github](#org25933cb)
-2.  [Git代理设置与访问](#org84e801f)
-3.  [代理设置githubusercontent](#orgf76cabc)
+1.  [goagent代理github](#orge13d859)
+2.  [Git代理设置与访问](#org8a58f74)
+3.  [代理设置githubusercontent](#orgd51ee8e)
+4.  [国内加速Github的几种方案](#orgda0db2a)
 
 
-<a id="org25933cb"></a>
+<a id="orge13d859"></a>
 
 # goagent代理github
 
@@ -45,7 +46,7 @@ tags:
 1.  sudo apt-get-o Acquire::<http::proxy="https://127.0.0.1:8087/>" update
 
 
-<a id="org84e801f"></a>
+<a id="org8a58f74"></a>
 
 # Git代理设置与访问
 
@@ -106,7 +107,7 @@ from this port. Most Web browsers use port 443 for SSL requests.  )
 **git clone git@ssh.github.com:OpenTSDB/opentsdb.git**
 
 
-<a id="orgf76cabc"></a>
+<a id="orgd51ee8e"></a>
 
 # 代理设置githubusercontent
 
@@ -118,4 +119,24 @@ ref: <https://zhuanlan.zhihu.com/p/107691233>
 然后 sudo systemctl restart NetworkManager.service 不用可能也可以。
 
 ping raw.githubusercontent.com
+
+
+<a id="orgda0db2a"></a>
+
+# 国内加速Github的几种方案
+
+<https://qu.js.cn/how-to-speed-github/>
+
+
+## 免替换法
+
+> git config &#x2013;global url."<https://hub.fastgit.org".insteadOf> <https://github.com>
+
+
+## raw文件下载加速
+
+将 raw.githubusercontent.com 替换为 raw.staticdn.net 即可加速。
+
+
+## 
 
