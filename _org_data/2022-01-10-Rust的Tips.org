@@ -1,0 +1,27 @@
+#+options: toc:nil ^:nil
+#+begin_export md
+---
+layout: post
+title:  "Rust的Tips"
+date:   2022-01-10
+tags:
+      - it
+---
+#+end_export
+#+TOC: headlines 1
+
+* 12个Rust的Tips
+https://rustcc.cn/article?id=84fc469b-51d4-4437-91fd-980f69838699
+
+1. 使用 Cow<str> 作为返回类型
+1. 使用 Crossbeam channels 取代标准库
+1. 使用 Scopeguard 实现类似 Golang 的延迟运算
+1. 使用 Cargo-make 打包
+1. 自定义和链接 Panic 处理程序
+1. 在 VSCode 中使用 Rust Analyzer
+1. 用到闭包时使用 impl Trait
+1. 在保存时为 VSCode 启用 Clippy
+1. 使用 thiserror 和 anyhow 处理惯用错误
+1. 使用 dbg!() 替换 println!()
+1. 使用 include_str!() 和 include_bytes!() 宏在编译时读取文件
+1. 使用 cc crate 与 C/C++ 代码交互
