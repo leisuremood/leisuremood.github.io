@@ -41,121 +41,136 @@ https://rustcc.cn/article?id=84fc469b-51d4-4437-91fd-980f69838699
    #+end_src
    PhantomData主要目的是标记这个Rc结构体拥有这个RcBox<T>，实际不占用空间，告诉编译器在drop Rc的时候会drop掉RcBox<T>。
    - Rust drop 数据的顺序如下：
+     - 变量是它们声明顺序的逆序
+     - struct的fields，是fields的声明顺序
+   
+   一个例子：
+   #+begin_src rust
+   	 struct World<'a> {
+         inspector: Option<Inspector<'a>>, //相当于a: &b
+         days: Box<u8>,                    //相当于b
+   	 }
 
-    * 变量是它们声明顺序的逆序
-    * struct的fields，是fields的声明顺序
-#+begin_src rust
-  struct World<'a> {
-      inspector: Option<Inspector<'a>>, //相当于a: &b
-      days: Box<u8>,                    //相当于b
-  }
+   	 struct Inspector<'a>(&'a u8);
 
-  struct Inspector<'a>(&'a u8);
+   	 impl<'a> Drop for Inspector<'a> {
+         fn drop(&mut self) {
+   	   println!("I was only {} days from retirement!", self.0);
+         }
+   	 }
 
-  impl<'a> Drop for Inspector<'a> {
-      fn drop(&mut self) {
-	  println!("I was only {} days from retirement!", self.0);
-      }
-  }
+   	 fn main() {
+         let mut world = World {
+   	   inspector: None,
+   	   days: Box::new(1),
+         };
+         world.inspector = Some(Inspector(&world.days)); // a = &b
+   	 }
 
-  fn main() {
-      let mut world = World {
-	  inspector: None,
-	  days: Box::new(1),
-      };
-      world.inspector = Some(Inspector(&world.days)); // a = &b
-  }
+   #+end_src
 
+   rustc main.rs 出错了。虽然理论上inpsector先被销毁，但是编译器还是认为days 没有strictly outlive inspector，也就是days 没有outlive world。是不是有点意外？如果你就是要编译通过呢？因为刚刚我们已经分析清楚，inspector先销毁的并且它的drop函数也没有干见不得人的事情，所以是安全的（注意实际代码不要依赖这种顺序，至少目前不要）。Rust有个特性叫drop_eyepatch，结合#[may_dangle[]可以让代码编译通过
+
+#+name: struct_pic
+#+begin_src ditaa :cache yes :eval no-export :file ../images/struct.png :cmdline -r
+    +-----------+       +---------+
+    | World     |       |         |
+    +-+---------+       |Inspector|
+      |inspector| -=--> |         |
+      |---------|       |         |
+      |days     | <--=- |         |
+      +---------+       +---------+
+   #+end_src
+
+#+name: pic_link   
+#+begin_src shell  :result html :var pic=struct_pic[:eval query-export]() :wrap EXPORT markdown :exports results
+  file="/images/$(basename $pic)"
+  echo "![img]($file)"
 #+end_src
-rustc main.rs 出错了。虽然理论上inpsector先被销毁，但是编译器还是认为days 没有strictly outlive inspector，也就是days 没有outlive world。是不是有点意外？如果你就是要编译通过呢？因为刚刚我们已经分析清楚，inspector先销毁的并且它的drop函数也没有干见不得人的事情，所以是安全的（注意实际代码不要依赖这种顺序，至少目前不要）。Rust有个特性叫drop_eyepatch，结合#[may_dangle[]可以让代码编译通过
 
-#+begin_src ditaa :file ../images/struct.png :cmdline -r
- +-----------+       +---------+
- | World     |       |         |
- +-+---------+       |Inspector|
-   |inspector| -=--> |         |
-   |---------|       |         |
-   |days     | <--=- |         |
-   +---------+       +---------+
-#+end_src
-或者说rustc没有那么智能，不去判断struct顺序上的依赖关系？
+#+RESULTS: pic_link
+#+begin_EXPORT markdown
+![img](/images/struct.png)
+#+end_EXPORT
 
-这样是错误的。
-#+begin_src rust
-  struct Foo<T> {
-      name: *mut T,
-  }
-  impl<T> Foo<T> {
-      fn new(init: T) -> Self {
-	  Self {
-	      name: Box::into_raw(Box::new(init)),
-	  }
-      }
-  }
-  impl<T> Drop for Foo<T> {
-      fn drop(&mut self) {
-	  {
-	      unsafe{ Box::from_raw(self.name);}
-	  }
-      }
-  }
-  // 是的，&_s的生命周期比_a要短，所以不通过是正常的。
-  fn main1() {
-      let _a;
-      let _s = "hello world".to_owned();
-      _a = Foo::new(&_s);
-  }
-  // 因为声明为(_a, _s)编译器仍然认为_s不是 strictly alive _a，所以要报错。
-  fn main2() {
-      let (_a, _s);
-      _s = "hello world".to_owned();
-      _a = Foo::new(&_s);
-  }
+   或者说rustc没有那么智能，不去判断struct顺序上的依赖关系？
 
-#+end_src
-这时候作为程序员，你知道这两个main函数都是安全的（为什么呢？留给读者思考）。因此Rust也提供了#[may_dangle ]特技，让你编译通过。我们只要借助#[may_dangle]将drop函数改为如下，就可以通过编译。
-#+begin_src rust
-  #![feature(dropck_eyepatch)] // !!add the beginning of the file
-  unsafe impl<#[may_dangle] T> Drop for Foo<T> {
-      fn drop(&mut self) {
-	  // try to drop T as we owns it
-	  unsafe { Box::from_raw(self.name); }
-      }
-  }
-#+end_src
-这是因为#[may_dangle]告诉编译器虽然T有dangle pointer，但是我们不会访问，所以是安全的，请让它通过编译。但是这么修改以后，Foo<T>就会接收下面的Bad 结构体，出现UB。
-#+begin_src rust
-  struct Bad<T:Debug>(T);
-  impl<T:Debug> Drop for Bad<T> {
-      fn drop(&mut self) {
-	  println!("{:?}", self.0);
-      }
-  }
-  fn main() {
-      let _a;
-      let _s = "evil dog".to_owned();
-      let _b = Bad(&_s);
-      _a = Foo::new(_b);
-  }
-#+end_src
-通过反思，我们希望当T有定义drop函数的时候，我们要拒绝接受它，从而避免出现这样的问题。而PhantomData就是我们的好帮手。所以我们将Foo<T>修改如下
-#+begin_src rust
-  use std::marker::PhantomData;
+   这样是错误的。
+   #+begin_src rust
+     struct Foo<T> {
+         name: *mut T,
+     }
+     impl<T> Foo<T> {
+         fn new(init: T) -> Self {
+   	  Self {
+   	      name: Box::into_raw(Box::new(init)),
+   	  }
+         }
+     }
+     impl<T> Drop for Foo<T> {
+         fn drop(&mut self) {
+   	  {
+   	      unsafe{ Box::from_raw(self.name);}
+   	  }
+         }
+     }
+     // 是的，&_s的生命周期比_a要短，所以不通过是正常的。
+     fn main1() {
+         let _a;
+         let _s = "hello world".to_owned();
+         _a = Foo::new(&_s);
+     }
+     // 因为声明为(_a, _s)编译器仍然认为_s不是 strictly alive _a，所以要报错。
+     fn main2() {
+         let (_a, _s);
+         _s = "hello world".to_owned();
+         _a = Foo::new(&_s);
+     }
 
-  struct Foo<T> {
-      name: *mut T,
-      _marker: PhantomData<T>,
-  }
-  impl<T> Foo<T> {
-      fn new(init: T) -> Self {
-	  Self {
-	      name: Box::into_raw(Box::new(init)),
-	      _marker: PhantomData
-	  }
-      }
-  }
-#+end_src
-通过这个例子我们就深刻明白了PhantomData与#[may_dangle] 珠联璧合，实现了下面的目的
+   #+end_src
+   这时候作为程序员，你知道这两个main函数都是安全的（为什么呢？留给读者思考）。因此Rust也提供了#[may_dangle ]特技，让你编译通过。我们只要借助#[may_dangle]将drop函数改为如下，就可以通过编译。
+   #+begin_src rust
+     #![feature(dropck_eyepatch)] // !!add the beginning of the file
+     unsafe impl<#[may_dangle] T> Drop for Foo<T> {
+         fn drop(&mut self) {
+   	  // try to drop T as we owns it
+   	  unsafe { Box::from_raw(self.name); }
+         }
+     }
+   #+end_src
+   这是因为#[may_dangle]告诉编译器虽然T有dangle pointer，但是我们不会访问，所以是安全的，请让它通过编译。但是这么修改以后，Foo<T>就会接收下面的Bad 结构体，出现UB。
+   #+begin_src rust
+     struct Bad<T:Debug>(T);
+     impl<T:Debug> Drop for Bad<T> {
+         fn drop(&mut self) {
+   	  println!("{:?}", self.0);
+         }
+     }
+     fn main() {
+         let _a;
+         let _s = "evil dog".to_owned();
+         let _b = Bad(&_s);
+         _a = Foo::new(_b);
+     }
+   #+end_src
+   通过反思，我们希望当T有定义drop函数的时候，我们要拒绝接受它，从而避免出现这样的问题。而PhantomData就是我们的好帮手。所以我们将Foo<T>修改如下
+   #+begin_src rust
+     use std::marker::PhantomData;
 
-   - 如果T拥有自定义的drop函数，那么编译器仍然要T strictly outlive Foo。
-   - 如果T没有自定义的drop函数，那么就不要求 T outlive Foo<T>。
+     struct Foo<T> {
+         name: *mut T,
+         _marker: PhantomData<T>,
+     }
+     impl<T> Foo<T> {
+         fn new(init: T) -> Self {
+   	  Self {
+   	      name: Box::into_raw(Box::new(init)),
+   	      _marker: PhantomData
+   	  }
+         }
+     }
+   #+end_src
+   通过这个例子我们就深刻明白了PhantomData与#[may_dangle] 珠联璧合，实现了下面的目的
+
+      - 如果T拥有自定义的drop函数，那么编译器仍然要T strictly outlive Foo。
+      - 如果T没有自定义的drop函数，那么就不要求 T outlive Foo<T>。
