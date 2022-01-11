@@ -29,6 +29,22 @@ https://rustcc.cn/article?id=84fc469b-51d4-4437-91fd-980f69838699
 * rust 实用 crates
 1. Dioxus -- a new Rust GUI toolkit for Web, Desktop, Mobile, SSR, TUI that emphasizes developer experience
 1. Salvo -- 简易的http server.
+
+* 基于 Rust 编写的实用命令行工具
+https://zhuanlan.zhihu.com/p/356091194
+
+  1. alacritty 使用 GPU 加速的跨平台终端模拟器
+  1. starship 超级快、支持各种订制的极简命令行提示符，支持任意 shell
+  1. exa ls 现代版
+  1. bat 支持更多特性的 cat 克隆
+  1. delta git、diff 输出查看器
+  1. zoxide 更快捷地浏览文件系统
+  1. ripgrep 基于正则表达式递归搜索目录
+  1. fd 简单、快速、用户友好的 find 替代品
+  1. bottom 又一个跨平台的图形化进程/系统查看器
+  1. tldr 众人一起编写的终端命令速查卡
+  1. spotify-tui Spotify 客户端命令行版
+  1. gitui 超级 快的 git 字符界面客户端
    
 * rust 疑难杂症
 1. PhantomData
