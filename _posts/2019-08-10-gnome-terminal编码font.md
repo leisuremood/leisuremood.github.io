@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "设置gnome-terminal font编码"
+title:  "bbs设置gnome-terminal font编码"
 date:   2019-08-10
 tags:
       - it
@@ -9,11 +9,12 @@ tags:
 
 # Table of Contents
 
-1.  [设置gnome-terminal font](#org34b3ed9)
-2.  [key编码](#orge50e833)
+1.  [设置gnome-terminal font](#org50f9995)
+2.  [key编码](#org1230bc1)
+3.  [Ubuntu 下使用 telnet 访问水木社区](#org02da3e2)
 
 
-<a id="org34b3ed9"></a>
+<a id="org50f9995"></a>
 
 # 设置gnome-terminal font
 
@@ -30,7 +31,7 @@ screenshot
 ![img](https://imglf3.lf127.net/img/TE0ySjlkTnYxRnRCM05JTVlma1djV0ZSaEVSaEhvdk11b0pUeEp4cmZ5L2ZVRnoyUlRxOEJnPT0.png?=imageView&thumbnail=500x0&quality=96&stripmeta=0&type=jpg%7Cwatermark&type=2)
 
 
-<a id="orge50e833"></a>
+<a id="org1230bc1"></a>
 
 # key编码
 
@@ -46,4 +47,17 @@ up - "\\033[A" down - "\\033[B" left - "\\033[D" right - "\\033[C"
 \\033 = 0x1b = 27 = ^[= Esc 键 ， 也就是说up down left right 这些键，每个都由三个字符组成。
 
 读到键值为 读到27时，再读一个是'[' = 0x5B = 91, 然后再读一个键，若是'A' = 0x41 = 65则表示向上的箭头。其他的类似。
+
+
+<a id="org02da3e2"></a>
+
+# Ubuntu 下使用 telnet 访问水木社区
+
+<https://www.sunzhongwei.com/ubuntu-using-telnet-access-shuimu-community>
+
+luit -encoding GBK ssh mysmth.net
+
+luit 命令是一个过滤器，在任意应用程序和 UTF-8 终端仿真器之间运行。luit 命令将应用程序输出从语言环境的编码转换为 UTF-8，并将终端输入从 UTF-8 转换为语言环境的编码。
+
+![img](http://cdn.sunzhongwei.com/Screenshot%20from%202017-12-26%2012-47-59.png)
 
