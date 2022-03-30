@@ -25,7 +25,11 @@ https://rustcc.cn/article?id=84fc469b-51d4-4437-91fd-980f69838699
 1. 使用 dbg!() 替换 println!()
 1. 使用 include_str!() 和 include_bytes!() 宏在编译时读取文件
 1. 使用 cc crate 与 C/C++ 代码交互
+1. 判断汉字。在Rust中，一个英文字符或者阿拉伯数字是占一个字节的，而一个汉字是占3个字符串。可以使用std::mem::size_of_val()方法查看在内存占用几个字节。\\
+   https://www.jianshu.com/p/844537218e6e
 
+   http://wilson-blog.cn/post/2021/04/26/rust.chstr.html\\
+   https://course.rs/basic/base-type/char-bool.html
 * rust 实用 crates
 1. Dioxus -- a new Rust GUI toolkit for Web, Desktop, Mobile, SSR, TUI that emphasizes developer experience
 1. Salvo -- 简易的http server.

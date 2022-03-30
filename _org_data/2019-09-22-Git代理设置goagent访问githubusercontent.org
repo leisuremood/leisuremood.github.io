@@ -2,7 +2,7 @@
 #+begin_export md
 ---
 layout: post
-title: "Git代理设置goagent访问githubusercontent"
+title: "Git代理goagent访问githubusercontent及设置"
 date: 2019-09-22
 tags: 
     - it
@@ -84,7 +84,6 @@ from this port. Most Web browsers use port 443 for SSL requests.  )
 
 *git clone git@ssh.github.com:OpenTSDB/opentsdb.git*
 
-
 * 代理设置githubusercontent
 
 ref: https://zhuanlan.zhihu.com/p/107691233
@@ -102,4 +101,21 @@ git config --global url."https://hub.fastgit.org".insteadOf https://github.com
 #+end_quote
 ** raw文件下载加速
 将 raw.githubusercontent.com 替换为 raw.staticdn.net 即可加速。
-** 
+
+* git和diff的delta使用
+https://www.5axxw.com/wiki/content/xrx4vf
+
+* git difftool和mergetool图形化
+https://www.cnblogs.com/jxldjsn/p/9691902.html
+
+git config --global diff.tool bc3
+
+git config --global difftool.bc3.path "/usr/bin/bcompare
+
+git config --global difftool.prompt false
+
+git config --global merge.tool bc3
+
+git config --global mergetool.bc3.path "/usr/bin/bcompare"
+
+git config --global mergetool.bc3.trustExitCode true

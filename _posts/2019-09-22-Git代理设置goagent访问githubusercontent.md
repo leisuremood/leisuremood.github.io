@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Git代理设置goagent访问githubusercontent"
+title: "Git代理goagent访问githubusercontent及设置"
 date: 2019-09-22
 tags: 
     - it
@@ -9,13 +9,15 @@ tags:
 
 # Table of Contents
 
-1.  [goagent代理github](#orge13d859)
-2.  [Git代理设置与访问](#org8a58f74)
-3.  [代理设置githubusercontent](#orgd51ee8e)
-4.  [国内加速Github的几种方案](#orgda0db2a)
+1.  [goagent代理github](#org7e7544c)
+2.  [Git代理设置与访问](#orgc087e2b)
+3.  [代理设置githubusercontent](#org5f2e450)
+4.  [国内加速Github的几种方案](#orgae6081f)
+5.  [git和diff的delta使用](#org565c8ab)
+6.  [git difftool和mergetool图形化](#org56649ab)
 
 
-<a id="orge13d859"></a>
+<a id="org7e7544c"></a>
 
 # goagent代理github
 
@@ -46,7 +48,7 @@ tags:
 1.  sudo apt-get-o Acquire::<http::proxy="https://127.0.0.1:8087/>" update
 
 
-<a id="org8a58f74"></a>
+<a id="orgc087e2b"></a>
 
 # Git代理设置与访问
 
@@ -107,7 +109,7 @@ from this port. Most Web browsers use port 443 for SSL requests.  )
 **git clone git@ssh.github.com:OpenTSDB/opentsdb.git**
 
 
-<a id="orgd51ee8e"></a>
+<a id="org5f2e450"></a>
 
 # 代理设置githubusercontent
 
@@ -121,7 +123,7 @@ ref: <https://zhuanlan.zhihu.com/p/107691233>
 ping raw.githubusercontent.com
 
 
-<a id="orgda0db2a"></a>
+<a id="orgae6081f"></a>
 
 # 国内加速Github的几种方案
 
@@ -138,5 +140,28 @@ ping raw.githubusercontent.com
 将 raw.githubusercontent.com 替换为 raw.staticdn.net 即可加速。
 
 
-## 
+<a id="org565c8ab"></a>
+
+# git和diff的delta使用
+
+<https://www.5axxw.com/wiki/content/xrx4vf>
+
+
+<a id="org56649ab"></a>
+
+# git difftool和mergetool图形化
+
+<https://www.cnblogs.com/jxldjsn/p/9691902.html>
+
+git config &#x2013;global diff.tool bc3
+
+git config &#x2013;global difftool.bc3.path "/usr/bin/bcompare
+
+git config &#x2013;global difftool.prompt false
+
+git config &#x2013;global merge.tool bc3
+
+git config &#x2013;global mergetool.bc3.path "/usr/bin/bcompare"
+
+git config &#x2013;global mergetool.bc3.trustExitCode true
 
