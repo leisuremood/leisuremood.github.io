@@ -16,10 +16,12 @@ https://www.yiibai.com/sqlite/sqlite_sub_queries.html
 https://www.cnblogs.com/Mr_JinRui/archive/2010/05/12/1733662.html
 
 #+begin_src sql
-SELECT * FROM COMPANY WHERE ID IN (SELECT ID FROM COMPANY WHERE SALARY > 45000) ;
-insert into revtbl select * from revtbl;
-DROP VIEW IF EXISTS v_test;
-CREATE VIEW IF NOT EXISTS v_test AS SELECT * FROM test;
+  sqlite3 xsm.db  "create table if not exists Boards (xid int primarykey not null, name char(50) not null, url char(50) not null)"
+
+  SELECT * FROM COMPANY WHERE ID IN (SELECT ID FROM COMPANY WHERE SALARY > 45000) ;
+  insert into revtbl select * from revtbl;
+  DROP VIEW IF EXISTS v_test;
+  CREATE VIEW IF NOT EXISTS v_test AS SELECT * FROM test;
 #+end_src
 
 * An async & dynamic ORM for Rust
@@ -28,3 +30,15 @@ An Object Relational Mapper (ORM) is a programming library to help you interact 
 https://www.sea-ql.org/SeaORM/docs/introduction/orm
 
 https://zhuanlan.zhihu.com/p/417431284
+
+* 关于配置SQLite数据库的URI路径的困惑
+
+https://cloud.tencent.com/developer/ask/220943
+
+这意味着要使用的实际文件名以第三个斜杠右侧的字符开头。因此，连接到相对文件路径如下所示：
+# relative path
+e = create_engine('sqlite:///path/to/database.db')
+
+绝对路径，以斜杠开头表示，意味着您需要四个斜杠：
+# absolute path
+e = create_engine('sqlite:////path/to/database.db')

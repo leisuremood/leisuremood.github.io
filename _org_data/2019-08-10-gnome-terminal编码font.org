@@ -48,3 +48,105 @@ luit -encoding GBK ssh mysmth.net
 luit 命令是一个过滤器，在任意应用程序和 UTF-8 终端仿真器之间运行。luit 命令将应用程序输出从语言环境的编码转换为 UTF-8，并将终端输入从 UTF-8 转换为语言环境的编码。
 
 http://cdn.sunzhongwei.com/Screenshot%20from%202017-12-26%2012-47-59.png
+* nc 端口转发
+nc -l -p 2323 -e "ssh -tt user@mysmth.net"
+访问2323实际上是访问了22端口。
+telnet localhost 2323
+
+#+begin_src python
+#!/usr/bin/env python
+from time import sleep
+import sys
+import threading
+import pexpect
+from pexpect import pxssh
+import telnetlib
+
+global glog
+glog=sys.stdout
+global debugLevel
+debugLevel=0
+import threading
+
+
+class MyThread(threading.Thread):
+    ssh_newkey="Are you sure you want to continue connecting"
+    def __init__(self):
+      super(MyThread, self).__init__()
+      self.s = pxssh.pxssh()
+      host = 'mysmth.net'
+      username = 'txgx'
+      connStr = 'nc -l -p 2323 -e "ssh -tt '+username +'@'+host + '"'
+      print(connStr)
+      self.child=pexpect.spawn(connStr) #实例化连接
+
+    def connect(self, ret):
+       if ret==0: #判断捕获的信息
+          print('[-] Error Connecting')
+          return ret
+       if ret==1: #捕获了ssh_newkey的消息
+          self.child.sendline('yes') #发送yes
+          ret=self.child.expect([pexpect.TIMEOUT,self.ssh_newkey,'[P|p]assword:'])
+          return self.connect(ret)
+       return ret
+    
+    def run(self):	# 函数名必须是 run
+       ret=self.child.expect([pexpect.TIMEOUT,self.ssh_newkey,'[P|p]assword:']) ##捕获 ssh_newkey
+       self.connect(ret)
+       print(self.child.before, file=glog, flush=True)
+       password = 'hello'
+       self.child.sendline(password)
+       print('send passwd', file=glog, flush=True)
+       # try:
+       #     for i in (1, 2, 3) :
+       #         ret = child.expect([('[RETURN] 继续').encode('gbk'), # 按 
+       #                             ('上次连线时间为').encode('gbk'),
+       #                             ('按任意键继续').encode('gbk')], timeout=5)
+       #         print(child.before, file=glog, flush=True)
+       #         retdict  = {
+       #             0: '\n',
+       #             1: '\n',
+       #             2: '\n',
+       #         }
+       #         child.send(retdict.get(ret))
+       #         sleep(1)
+       # except Exception as link_fault:
+       #     print(link_fault, file=glog, flush=True)
+       #     # print(child.buffer.decode('gbk'))
+       #     print(child.buffer)
+       #     exit(1)
+
+# t1 = MyThread()
+# t1.start()
+# sleep(1)
+# 连接Telnet服务器
+tn = telnetlib.Telnet("localhost", port=2323, timeout=10)
+tn.set_debuglevel(debugLevel)
+
+try:  # 抓取OSError: [Errno 99] Cannot assign requested address  异常
+   res = tn.read_until(('按 [RETURN] 继续').encode('gbk'))
+   print(res.decode('GBK'), file=glog, flush=True)
+   tn.write(bytes('\n', encoding = "utf8") )
+   print('1', file=glog, flush=True)
+
+   res = tn.read_until(('按任何键继续').encode('gbk'))
+   print(res.decode('GBK'), file=glog, flush=True)
+   tn.write(bytes('\n\n', encoding = "utf8") )
+   print('5', file=glog, flush=True)
+
+   res = tn.read_until(('按任意键继续').encode('gbk'))
+   print(res.decode('GBK'), file=glog, flush=True)
+   tn.write(bytes('\n\n', encoding = "utf8") )
+   print('5', file=glog, flush=True)
+
+   res = tn.read_until(('如何处理以上密码输入错误记录  (m)邮回信箱  (y)清除  (n)继续  [n]:').encode('gbk'))
+   print(res.decode('GBK'), file=glog, flush=True)
+   tn.write(bytes('n\n', encoding = "utf8") )
+   print('6', file=glog, flush=True)
+        
+except Exception as link_fault:
+   print(link_fault, file=glog, flush=True)
+   
+   exit(1)
+  
+#+end_src
