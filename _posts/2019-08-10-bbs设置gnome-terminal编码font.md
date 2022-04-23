@@ -1,0 +1,168 @@
+---
+layout: post
+title:  "bbs设置gnome-terminal font编码"
+date:   2019-08-10
+tags:
+      - it
+---
+
+
+# Table of Contents
+
+1.  [设置gnome-terminal font](#orgdfbbbc7)
+2.  [key编码](#org89e98b5)
+3.  [Ubuntu 下使用 telnet 访问水木社区](#org2f0bf3b)
+4.  [nc 端口转发](#orgbbef81b)
+
+
+<a id="orgdfbbbc7"></a>
+
+# 设置gnome-terminal font
+
+    cp /mnt/d/Windows/Fonts/simsun.ttf ~/.fonts
+    fc-cache
+    
+    sudo fc-cache -fv .fonts #(.fonts为你的字体目)
+    
+    fc-list
+    gnome-terminal
+
+screenshot
+
+![img](https://imglf3.lf127.net/img/TE0ySjlkTnYxRnRCM05JTVlma1djV0ZSaEVSaEhvdk11b0pUeEp4cmZ5L2ZVRnoyUlRxOEJnPT0.png?=imageView&thumbnail=500x0&quality=96&stripmeta=0&type=jpg%7Cwatermark&type=2)
+
+
+<a id="org89e98b5"></a>
+
+# key编码
+
+<https://blog.csdn.net/cean1024/article/details/72903069>
+
+第一，为什么在运行程序时，在终端按下箭头up down left right 箭头会出现
+^[A ^[B ^[C ^[D
+
+这个跟换键码有关，"escape sequence"实际上是用来生成换码符的关键字的顺序。换码符会告诉打印机将不再打印后面的字符，但是还要将这些字符解释为一类打印机控制码或其他。需要 Escape Sequences 顺序的应用程序通常是早期的 DOS 应用程序、UNIX (R) 应用程序或非常特殊的应用程序。
+
+up - "\\033[A" down - "\\033[B" left - "\\033[D" right - "\\033[C"
+
+\\033 = 0x1b = 27 = ^[= Esc 键 ， 也就是说up down left right 这些键，每个都由三个字符组成。
+
+读到键值为 读到27时，再读一个是'[' = 0x5B = 91, 然后再读一个键，若是'A' = 0x41 = 65则表示向上的箭头。其他的类似。
+
+
+<a id="org2f0bf3b"></a>
+
+# Ubuntu 下使用 telnet 访问水木社区
+
+<https://www.sunzhongwei.com/ubuntu-using-telnet-access-shuimu-community>
+
+luit -encoding GBK ssh mysmth.net
+
+luit 命令是一个过滤器，在任意应用程序和 UTF-8 终端仿真器之间运行。luit 命令将应用程序输出从语言环境的编码转换为 UTF-8，并将终端输入从 UTF-8 转换为语言环境的编码。
+
+![img](http://cdn.sunzhongwei.com/Screenshot%20from%202017-12-26%2012-47-59.png)
+
+
+<a id="orgbbef81b"></a>
+
+# nc 端口转发
+
+nc -l -p 2323 -e "ssh -tt user@mysmth.net"
+访问2323实际上是访问了22端口。
+telnet localhost 2323
+
+    #!/usr/bin/env python
+    from time import sleep
+    import sys
+    import threading
+    import pexpect
+    from pexpect import pxssh
+    import telnetlib
+    
+    global glog
+    glog=sys.stdout
+    global debugLevel
+    debugLevel=0
+    import threading
+    
+    
+    class MyThread(threading.Thread):
+        ssh_newkey="Are you sure you want to continue connecting"
+        def __init__(self):
+          super(MyThread, self).__init__()
+          self.s = pxssh.pxssh()
+          host = 'mysmth.net'
+          username = 'txgx'
+          connStr = 'nc -l -p 2323 -e "ssh -tt '+username +'@'+host + '"'
+          print(connStr)
+          self.child=pexpect.spawn(connStr) #实例化连接
+    
+        def connect(self, ret):
+           if ret==0: #判断捕获的信息
+    	  print('[-] Error Connecting')
+    	  return ret
+           if ret==1: #捕获了ssh_newkey的消息
+    	  self.child.sendline('yes') #发送yes
+    	  ret=self.child.expect([pexpect.TIMEOUT,self.ssh_newkey,'[P|p]assword:'])
+    	  return self.connect(ret)
+           return ret
+    
+        def run(self):	# 函数名必须是 run
+           ret=self.child.expect([pexpect.TIMEOUT,self.ssh_newkey,'[P|p]assword:']) ##捕获 ssh_newkey
+           self.connect(ret)
+           print(self.child.before, file=glog, flush=True)
+           password = 'hello'
+           self.child.sendline(password)
+           print('send passwd', file=glog, flush=True)
+           # try:
+           #     for i in (1, 2, 3) :
+           #         ret = child.expect([('[RETURN] 继续').encode('gbk'), # 按 
+           #                             ('上次连线时间为').encode('gbk'),
+           #                             ('按任意键继续').encode('gbk')], timeout=5)
+           #         print(child.before, file=glog, flush=True)
+           #         retdict  = {
+           #             0: '\n',
+           #             1: '\n',
+           #             2: '\n',
+           #         }
+           #         child.send(retdict.get(ret))
+           #         sleep(1)
+           # except Exception as link_fault:
+           #     print(link_fault, file=glog, flush=True)
+           #     # print(child.buffer.decode('gbk'))
+           #     print(child.buffer)
+           #     exit(1)
+    
+    # t1 = MyThread()
+    # t1.start()
+    # sleep(1)
+    # 连接Telnet服务器
+    tn = telnetlib.Telnet("localhost", port=2323, timeout=10)
+    tn.set_debuglevel(debugLevel)
+    
+    try:  # 抓取OSError: [Errno 99] Cannot assign requested address  异常
+       res = tn.read_until(('按 [RETURN] 继续').encode('gbk'))
+       print(res.decode('GBK'), file=glog, flush=True)
+       tn.write(bytes('\n', encoding = "utf8") )
+       print('1', file=glog, flush=True)
+    
+       res = tn.read_until(('按任何键继续').encode('gbk'))
+       print(res.decode('GBK'), file=glog, flush=True)
+       tn.write(bytes('\n\n', encoding = "utf8") )
+       print('5', file=glog, flush=True)
+    
+       res = tn.read_until(('按任意键继续').encode('gbk'))
+       print(res.decode('GBK'), file=glog, flush=True)
+       tn.write(bytes('\n\n', encoding = "utf8") )
+       print('5', file=glog, flush=True)
+    
+       res = tn.read_until(('如何处理以上密码输入错误记录  (m)邮回信箱  (y)清除  (n)继续  [n]:').encode('gbk'))
+       print(res.decode('GBK'), file=glog, flush=True)
+       tn.write(bytes('n\n', encoding = "utf8") )
+       print('6', file=glog, flush=True)
+    
+    except Exception as link_fault:
+       print(link_fault, file=glog, flush=True)
+    
+       exit(1)
+
