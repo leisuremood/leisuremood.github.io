@@ -314,3 +314,30 @@ https://zhuanlan.zhihu.com/p/356091194
 #+end_src
 ** 一个元素的Tuple
 语法是("single", ) 如果写成("single"), rustc会提示你去掉多余的(), 并且如果你想要Tuple,那么加个逗号。("single", )
+
+** generic_associated_types
+
+如何将trait里面的associated type指定life time  https://rust-lang.github.io/rfcs/1598-generic_associated_types.html
+
+** A new impl Trait (by davidkoloski)
+
+https://davidkoloski.me/blog/a-new-impl-trait-1/
+提出了一些问题
+
+#+begin_src rust
+fn pick(which: bool, x: impl Debug, y: impl Debug) -> impl Debug {
+    if !which {
+        x
+    } else {
+        y
+    }
+}
+#+end_src
+是不行的，因为x,y可能是不同的类型。现在的impl Trait有2个缺陷，（A new impl Trait 4/4 ）
+The largest obstacle for as impl Trait will be building consensus for either type inference or named unnameables.
+
+- 类型推导 type inference
+  
+- 不可命名类型的命名 named unnameable types.
+  
+  
