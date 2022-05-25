@@ -50,8 +50,8 @@ https://zhuanlan.zhihu.com/p/356091194
   1. spotify-tui Spotify 客户端命令行版
   1. gitui 超级 快的 git 字符界面客户端
    
-* rust 疑难杂症
-1. PhantomData
+* rust 疑难分析
+** PhantomData
    https://zhuanlan.zhihu.com/p/383004091
    #+begin_src rust
      pub struct Rc<T: ?Sized> {
@@ -194,3 +194,43 @@ https://zhuanlan.zhihu.com/p/356091194
 
       - 如果T拥有自定义的drop函数，那么编译器仍然要T strictly outlive Foo。
       - 如果T没有自定义的drop函数，那么就不要求 T outlive Foo<T>。
+
+** 语法代码例子
+#+begin_src rust
+  #![allow(unused)]                                                               
+
+  pub struct Ui {}                                                                
+  // 也就是ComponentBuilder
+  pub trait Component<Params, Content> {                                          
+      fn call(&self, ui: &mut Ui, params: Params, content: Content);              
+  }                                                                               
+  // 约束一个函数类型实现ComponentBuilder， 其中Content也就是ContentBuilder
+  impl<F, P1, P2, Content> Component<(P1, P2), Content> for F                     
+  where P1: PartialEq + Clone + 'static,                                      
+	P2: PartialEq + Clone + 'static,                                      
+	Content: FnOnce(&mut Ui),                                             
+	F: Fn(&mut Ui, P1, P2, Content)                                       
+  {                                                                               
+      fn call(&self, ui: &mut Ui, params: (P1, P2), content: Content) {           
+	  let (p1, p2) = params;
+	  self(ui, p1, p2, content)                                               
+      }                                                                           
+  }                                                                               
+  // 范式创建Component, 可以用不同的param和content builder.
+  pub fn memoize<Params: PartialEq + Clone + 'static,                             
+		 C: FnOnce(&mut Ui),                                              
+		 Comp: Component<Params, C>>(                                     
+      ui: &mut Ui, component: Comp, params: Params, content: C) {                 
+      component.call(ui, params, content);                                        
+  }                                                                               
+  // 用了具体的param创建Component
+  fn comp2(ui: &mut Ui, a: u8, b: u32, f: impl FnOnce(&mut Ui)) { f(ui); }        
+
+  fn main() {                                                                     
+      let mut ui = Ui {};
+      // 直接用comp2也可以，但调用范式更整洁一点。
+      memoize(&mut ui, comp2, (2, 3), |_| {});
+  }                                                                               
+#+end_src
+** 一个元素的Tuple
+语法是("single", ) 如果写成("single"), rustc会提示你去掉多余的(), 并且如果你想要Tuple,那么加个逗号。("single", )
