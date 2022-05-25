@@ -232,5 +232,85 @@ https://zhuanlan.zhihu.com/p/356091194
       memoize(&mut ui, comp2, (2, 3), |_| {});
   }                                                                               
 #+end_src
+
+同样的例子，用宏实现多参数函数。
+
+#+begin_src rust
+
+  pub struct Ui {
+  }
+
+
+  pub trait Component {
+      type Params: PartialEq + Clone + 'static;
+      type Content: FnOnce(&mut Ui);
+
+      fn call(&self, ui: &mut Ui, params: Self::Params, content: Self::Content);
+  }
+
+
+  impl<C: for<'c> FnOnce(&'c mut Ui)> Component for for <'c> fn(&'c mut Ui, C) {
+      type Params = ();
+      type Content = C;
+
+      fn call(&self, ui: &mut Ui, params: Self::Params, content: Self::Content) {
+	  self(ui, content);
+      }
+  }
+
+
+  macro_rules! component_args {
+      ($($P: tt),+) => {
+	  #[allow(non_snake_case)]
+	  impl<$($P: Clone + PartialEq + 'static),*, C: for<'c> FnOnce(&'c mut Ui)> Component
+	      for for<'c> fn(&'c mut Ui, $($P),*, C)
+	  {
+	      type Params = ($($P),*);
+
+	      type Content = C;
+
+	      fn call(&self, ui: &mut Ui, params: Self::Params, content: Self::Content) {
+		  let ($($P),*) = params;
+		  self(ui, $($P),*, content);
+	      }
+	  }
+      };
+  }
+
+  component_args!(P1);
+  component_args!(P1, P2);
+  component_args!(P1, P2, P3);
+  component_args!(P1, P2, P3, P4);
+  component_args!(P1, P2, P3, P4, P5);
+  component_args!(P1, P2, P3, P4, P5, P6);
+  component_args!(P1, P2, P3, P4, P5, P6, P7);
+  component_args!(P1, P2, P3, P4, P5, P6, P7, P8);
+  component_args!(P1, P2, P3, P4, P5, P6, P7, P8, P9);
+  component_args!(P1, P2, P3, P4, P5, P6, P7, P8, P9, P10);
+
+  pub fn memoize<
+	  Params: PartialEq + Clone + 'static,
+      C: for<'c> FnOnce(&'c mut Ui),
+      Comp: Component<Params = Params, Content = C>,
+      >(
+      ui: &mut Ui,
+      component: Comp,
+      params: Params,
+      content: C,
+  ) {
+      component.call(ui, params, content);
+  }
+
+
+  fn comp(ui: &mut Ui, s: usize, f: impl FnOnce(&mut Ui)) {
+      f(ui);
+  }
+
+
+  fn main() {
+      let mut ui = Ui {};
+      memoize(&mut ui, comp, (1,), |_|{})
+  }
+#+end_src
 ** 一个元素的Tuple
 语法是("single", ) 如果写成("single"), rustc会提示你去掉多余的(), 并且如果你想要Tuple,那么加个逗号。("single", )
