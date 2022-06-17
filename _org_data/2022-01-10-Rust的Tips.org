@@ -312,6 +312,8 @@ https://zhuanlan.zhihu.com/p/356091194
       memoize(&mut ui, comp, (1,), |_|{})
   }
 #+end_src
+参考 https://zjp-cn.github.io/rust-note/dcl/variadic.html
+
 ** 一个元素的Tuple
 语法是("single", ) 如果写成("single"), rustc会提示你去掉多余的(), 并且如果你想要Tuple,那么加个逗号。("single", )
 
@@ -333,6 +335,7 @@ fn pick(which: bool, x: impl Debug, y: impl Debug) -> impl Debug {
     }
 }
 #+end_src
+
 是不行的，因为x,y可能是不同的类型。现在的impl Trait有2个缺陷，（A new impl Trait 4/4 ）
 The largest obstacle for as impl Trait will be building consensus for either type inference or named unnameables.
 
