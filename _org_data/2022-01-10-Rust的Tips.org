@@ -8,13 +8,128 @@ tags:
       - it
 ---
 #+end_export
-#+TOC: headlines 1
+#+TITLE: Rust的Tips
+#+TOC: headlines 2
+
+* RsProxy 说明页
+https://rsproxy.cn
+由于国内拉取 crates.io 以及安装 Rust 会面临流量出境不稳定的问题，我们提供了一个国内镜像代理以帮助国内 Rust 生态发展。
+
+** 配置
+crates.io 镜像配置编辑 ~/.cargo/config:
+
+[source.crates-io]
+replace-with = 'rsproxy'
+[source.rsproxy]
+registry = "https://rsproxy.cn/crates.io-index"
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+[registries.rsproxy]
+index = "https://rsproxy.cn/crates.io-index"
+[net]
+git-fetch-with-cli = true
+
+** Rustup 镜像配置
+将下面的环境变量配置到您的 Shell rc 文件中（如 ~/.zshrc, ~/.bashrc 等，取决于您当前使用的 shell）。
+export RUSTUP_DIST_SERVER="https://rsproxy.cn"
+export RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
+
+** 安装 Rust：
+curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh | sh
+
+使用 Sparse Index
+默认情况下，cargo 会使用基于 Git 的 index（也是前面的默认配置）。但是随着 index 体积增大，利用 git 拉取全量 index 逐渐变得缓慢。这个 issue 跟踪了正在进行中的 Sparse Index 的进展。目前该功能在 nightly 版本下已可用。
+RsProxy 支持了该功能(@2022-07-13)。
+用户需要做 3 件小事：
+1. 使用较新版本的 nightly 工具链(nightly-2022-06-20 之后的版本)，不够的话 rustup update。
+2. 配置环境变量 CARGO_UNSTABLE_SPARSE_REGISTRY=true
+3. ~/.cargo/config 中使用 replace-with = 'rsproxy-sparse'
+
+Tips: 刚刚配置完需要应用 ~/.zshrc 等文件中的环境变量，vscode 需重开一下。
+
+** 功能对齐状态
+目前支持以下几种请求：
+- Crates 依赖下载
+- Rustup 工具链和 rustup-init.sh 下载
+- Crates 搜索 (cargo search)
+- Crates 发布 (cargo publish)
+
+
+* 基于 Rust 编写的实用命令行工具
+https://zhuanlan.zhihu.com/p/356091194
+
+1. alacritty 使用 GPU 加速的跨平台终端模拟器
+1. starship 超级快、支持各种订制的极简命令行提示符，支持任意 shell
+1. exa ls 现代版
+1. bat 支持更多特性的 cat 克隆
+1. delta git、diff 输出查看器
+1. zoxide 更快捷地浏览文件系统
+1. ripgrep 基于正则表达式递归搜索目录
+1. fd 简单、快速、用户友好的 find 替代品
+1. bottom 又一个跨平台的图形化进程/系统查看器
+1. tldr 众人一起编写的终端命令速查卡
+1. spotify-tui Spotify 客户端命令行版
+1. gitui 超级 快的 git 字符界面客户端
 
 * 12个Rust的Tips
 https://rustcc.cn/article?id=84fc469b-51d4-4437-91fd-980f69838699
 
 1. 使用 Cow<str> 作为返回类型
 1. 使用 Crossbeam channels 取代标准库
+   #+begin_src rust
+     #![feature(unwrap_infallible)]
+
+     fn main() {
+	 println!("Hello, world!");
+	 use std::thread;
+
+	 let vals = vec![
+	     String::from("hi"),
+	     String::from("from"),
+	     String::from("the"),
+	     String::from("thread"),
+	     String::from("Over"),
+	 ];
+
+	 let v1 = &vals[0];
+	 use crossbeam_channel::unbounded;
+
+	 // Create a channel of unbounded capacity.
+	 let (tx, rx) = unbounded::<&String>();
+
+	 let mut a = vec![1, 2, 3];
+	 let mut x = 0;
+
+	 thread::scope(|s| {
+	     s.spawn( || {
+		 println!("hello from the first scoped thread");
+		 // borrow `a` here
+		 dbg!(&a);
+		 for word in &vals {
+		     tx.send(word);
+		 }
+	     });
+	     s.spawn( || {
+		 println!("hello from the second scoped thread");
+		 // mutably borrow `x`, because no other threads are using it
+		 x += a[0] + a[2];
+		 for recv in rx {
+		     println!("Got: {}", recv);
+		     if recv == "Over" {
+			 break;
+		     }
+		 }
+	     });
+	     println!("hello from the main thread");
+	 });
+
+	 // after the scope, can modify and access the variables again
+	 a.push(4);
+	 assert_eq!(x, a.len());
+     }
+
+   #+end_src
+   这里的问题是for recv in rx永远在收字符，退不出来，所以只好判断接收到Over退出。也许drop(tx)可以结束接收端。[[drop]]
 1. 使用 Scopeguard 实现类似 Golang 的延迟运算
 1. 使用 Cargo-make 打包
 1. 自定义和链接 Panic 处理程序
@@ -30,77 +145,65 @@ https://rustcc.cn/article?id=84fc469b-51d4-4437-91fd-980f69838699
 
    http://wilson-blog.cn/post/2021/04/26/rust.chstr.html\\
    https://course.rs/basic/base-type/char-bool.html
+
+
+有写资料的blog： https://yangandmore.github.io/2022/01/12/Rust-%E9%AB%98%E7%BA%A7-Crate%E4%B9%8Bcrossbeam/
+
 * rust 实用 crates
 1. Dioxus -- a new Rust GUI toolkit for Web, Desktop, Mobile, SSR, TUI that emphasizes developer experience
 1. Salvo -- 简易的http server.
 
-* 基于 Rust 编写的实用命令行工具
-https://zhuanlan.zhihu.com/p/356091194
-
-  1. alacritty 使用 GPU 加速的跨平台终端模拟器
-  1. starship 超级快、支持各种订制的极简命令行提示符，支持任意 shell
-  1. exa ls 现代版
-  1. bat 支持更多特性的 cat 克隆
-  1. delta git、diff 输出查看器
-  1. zoxide 更快捷地浏览文件系统
-  1. ripgrep 基于正则表达式递归搜索目录
-  1. fd 简单、快速、用户友好的 find 替代品
-  1. bottom 又一个跨平台的图形化进程/系统查看器
-  1. tldr 众人一起编写的终端命令速查卡
-  1. spotify-tui Spotify 客户端命令行版
-  1. gitui 超级 快的 git 字符界面客户端
-   
 * rust 疑难分析
 ** PhantomData
-   https://zhuanlan.zhihu.com/p/383004091
-   #+begin_src rust
-     pub struct Rc<T: ?Sized> {
-	 ptr: NonNull<RcBox<T>>,
-	 phantom: PhantomData<RcBox<T>>,
-     }
-   #+end_src
-   PhantomData主要目的是标记这个Rc结构体拥有这个RcBox<T>，实际不占用空间，告诉编译器在drop Rc的时候会drop掉RcBox<T>。
-   - Rust drop 数据的顺序如下：
-     - 变量是它们声明顺序的逆序
-     - struct的fields，是fields的声明顺序
-   
-   一个例子：
-   #+begin_src rust
-   	 struct World<'a> {
-         inspector: Option<Inspector<'a>>, //相当于a: &b
-         days: Box<u8>,                    //相当于b
-   	 }
+https://zhuanlan.zhihu.com/p/383004091
+#+begin_src rust
+  pub struct Rc<T: ?Sized> {
+      ptr: NonNull<RcBox<T>>,
+      phantom: PhantomData<RcBox<T>>,
+  }
+#+end_src
+PhantomData主要目的是标记这个Rc结构体拥有这个RcBox<T>，实际不占用空间，告诉编译器在drop Rc的时候会drop掉RcBox<T>。
+    - Rust drop 数据的顺序如下：
+      - 变量是它们声明顺序的逆序
+      - struct的fields，是fields的声明顺序
 
-   	 struct Inspector<'a>(&'a u8);
+	一个例子：
+	#+begin_src rust
+	  struct World<'a> {
+	      inspector: Option<Inspector<'a>>, //相当于a: &b
+	      days: Box<u8>,                    //相当于b
+	  }
 
-   	 impl<'a> Drop for Inspector<'a> {
-         fn drop(&mut self) {
-   	   println!("I was only {} days from retirement!", self.0);
-         }
-   	 }
+	  struct Inspector<'a>(&'a u8);
 
-   	 fn main() {
-         let mut world = World {
-   	   inspector: None,
-   	   days: Box::new(1),
-         };
-         world.inspector = Some(Inspector(&world.days)); // a = &b
-   	 }
+	  impl<'a> Drop for Inspector<'a> {
+	      fn drop(&mut self) {
+		  println!("I was only {} days from retirement!", self.0);
+	      }
+	  }
 
-   #+end_src
+	  fn main() {
+	      let mut world = World {
+		  inspector: None,
+		  days: Box::new(1),
+	      };
+	      world.inspector = Some(Inspector(&world.days)); // a = &b
+	  }
 
-   rustc main.rs 出错了。虽然理论上inpsector先被销毁，但是编译器还是认为days 没有strictly outlive inspector，也就是days 没有outlive world。是不是有点意外？如果你就是要编译通过呢？因为刚刚我们已经分析清楚，inspector先销毁的并且它的drop函数也没有干见不得人的事情，所以是安全的（注意实际代码不要依赖这种顺序，至少目前不要）。Rust有个特性叫drop_eyepatch，结合#[may_dangle[]可以让代码编译通过
+	#+end_src
+
+	rustc main.rs 出错了。虽然理论上inpsector先被销毁，但是编译器还是认为days 没有strictly outlive inspector，也就是days 没有outlive world。是不是有点意外？如果你就是要编译通过呢？因为刚刚我们已经分析清楚，inspector先销毁的并且它的drop函数也没有干见不得人的事情，所以是安全的（注意实际代码不要依赖这种顺序，至少目前不要）。Rust有个特性叫drop_eyepatch，结合#[may_dangle[]可以让代码编译通过
 
 #+name: struct_pic
 #+begin_src ditaa :cache yes :eval no-export :file ../images/struct.png :cmdline -r
-    +-----------+       +---------+
-    | World     |       |         |
-    +-+---------+       |Inspector|
-      |inspector| -=--> |         |
-      |---------|       |         |
-      |days     | <--=- |         |
-      +---------+       +---------+
-   #+end_src
+  +-----------+       +---------+
+  | World     |       |         |
+  +-+---------+       |Inspector|
+  |inspector| -=--> |         |
+  |---------|       |         |
+  |days     | <--=- |         |
+  +---------+       +---------+
+#+end_src
 
 #+name: pic_link   
 #+begin_src shell  :result html :var pic=struct_pic[:eval query-export]() :wrap EXPORT markdown :exports results
@@ -113,87 +216,87 @@ https://zhuanlan.zhihu.com/p/356091194
 ![img](/images/struct.png)
 #+end_EXPORT
 
-   或者说rustc没有那么智能，不去判断struct顺序上的依赖关系？
+或者说rustc没有那么智能，不去判断struct顺序上的依赖关系？
 
-   这样是错误的。
-   #+begin_src rust
-     struct Foo<T> {
-         name: *mut T,
-     }
-     impl<T> Foo<T> {
-         fn new(init: T) -> Self {
-   	  Self {
-   	      name: Box::into_raw(Box::new(init)),
-   	  }
-         }
-     }
-     impl<T> Drop for Foo<T> {
-         fn drop(&mut self) {
-   	  {
-   	      unsafe{ Box::from_raw(self.name);}
-   	  }
-         }
-     }
-     // 是的，&_s的生命周期比_a要短，所以不通过是正常的。
-     fn main1() {
-         let _a;
-         let _s = "hello world".to_owned();
-         _a = Foo::new(&_s);
-     }
-     // 因为声明为(_a, _s)编译器仍然认为_s不是 strictly alive _a，所以要报错。
-     fn main2() {
-         let (_a, _s);
-         _s = "hello world".to_owned();
-         _a = Foo::new(&_s);
-     }
+这样是错误的。
+#+begin_src rust
+  struct Foo<T> {
+      name: *mut T,
+  }
+  impl<T> Foo<T> {
+      fn new(init: T) -> Self {
+	  Self {
+	      name: Box::into_raw(Box::new(init)),
+	  }
+      }
+  }
+  impl<T> Drop for Foo<T> {
+      fn drop(&mut self) {
+	  {
+	      unsafe{ Box::from_raw(self.name);}
+	  }
+      }
+  }
+  // 是的，&_s的生命周期比_a要短，所以不通过是正常的。
+  fn main1() {
+      let _a;
+      let _s = "hello world".to_owned();
+      _a = Foo::new(&_s);
+  }
+  // 因为声明为(_a, _s)编译器仍然认为_s不是 strictly alive _a，所以要报错。
+  fn main2() {
+      let (_a, _s);
+      _s = "hello world".to_owned();
+      _a = Foo::new(&_s);
+  }
 
-   #+end_src
-   这时候作为程序员，你知道这两个main函数都是安全的（为什么呢？留给读者思考）。因此Rust也提供了#[may_dangle ]特技，让你编译通过。我们只要借助#[may_dangle]将drop函数改为如下，就可以通过编译。
-   #+begin_src rust
-     #![feature(dropck_eyepatch)] // !!add the beginning of the file
-     unsafe impl<#[may_dangle] T> Drop for Foo<T> {
-         fn drop(&mut self) {
-   	  // try to drop T as we owns it
-   	  unsafe { Box::from_raw(self.name); }
-         }
-     }
-   #+end_src
-   这是因为#[may_dangle]告诉编译器虽然T有dangle pointer，但是我们不会访问，所以是安全的，请让它通过编译。但是这么修改以后，Foo<T>就会接收下面的Bad 结构体，出现UB。
-   #+begin_src rust
-     struct Bad<T:Debug>(T);
-     impl<T:Debug> Drop for Bad<T> {
-         fn drop(&mut self) {
-   	  println!("{:?}", self.0);
-         }
-     }
-     fn main() {
-         let _a;
-         let _s = "evil dog".to_owned();
-         let _b = Bad(&_s);
-         _a = Foo::new(_b);
-     }
-   #+end_src
-   通过反思，我们希望当T有定义drop函数的时候，我们要拒绝接受它，从而避免出现这样的问题。而PhantomData就是我们的好帮手。所以我们将Foo<T>修改如下
-   #+begin_src rust
-     use std::marker::PhantomData;
+#+end_src
+这时候作为程序员，你知道这两个main函数都是安全的（为什么呢？留给读者思考）。因此Rust也提供了#[may_dangle ]特技，让你编译通过。我们只要借助#[may_dangle]将drop函数改为如下，就可以通过编译。
+#+begin_src rust
+  #![feature(dropck_eyepatch)] // !!add the beginning of the file
+  unsafe impl<#[may_dangle] T> Drop for Foo<T> {
+      fn drop(&mut self) {
+	  // try to drop T as we owns it
+	  unsafe { Box::from_raw(self.name); }
+      }
+  }
+#+end_src
+这是因为#[may_dangle]告诉编译器虽然T有dangle pointer，但是我们不会访问，所以是安全的，请让它通过编译。但是这么修改以后，Foo<T>就会接收下面的Bad 结构体，出现UB。
+#+begin_src rust
+  struct Bad<T:Debug>(T);
+  impl<T:Debug> Drop for Bad<T> {
+      fn drop(&mut self) {
+	  println!("{:?}", self.0);
+      }
+  }
+  fn main() {
+      let _a;
+      let _s = "evil dog".to_owned();
+      let _b = Bad(&_s);
+      _a = Foo::new(_b);
+  }
+#+end_src
+通过反思，我们希望当T有定义drop函数的时候，我们要拒绝接受它，从而避免出现这样的问题。而PhantomData就是我们的好帮手。所以我们将Foo<T>修改如下
+#+begin_src rust
+  use std::marker::PhantomData;
 
-     struct Foo<T> {
-         name: *mut T,
-         _marker: PhantomData<T>,
-     }
-     impl<T> Foo<T> {
-         fn new(init: T) -> Self {
-   	  Self {
-   	      name: Box::into_raw(Box::new(init)),
-   	      _marker: PhantomData
-   	  }
-         }
-     }
-   #+end_src
-   通过这个例子我们就深刻明白了PhantomData与#[may_dangle] 珠联璧合，实现了下面的目的
+  struct Foo<T> {
+      name: *mut T,
+      _marker: PhantomData<T>,
+  }
+  impl<T> Foo<T> {
+      fn new(init: T) -> Self {
+	  Self {
+	      name: Box::into_raw(Box::new(init)),
+	      _marker: PhantomData
+	  }
+      }
+  }
+#+end_src
+通过这个例子我们就深刻明白了PhantomData与#[may_dangle] 珠联璧合，实现了下面的目的
 
-      - 如果T拥有自定义的drop函数，那么编译器仍然要T strictly outlive Foo。
-      - 如果T没有自定义的drop函数，那么就不要求 T outlive Foo<T>。
+- 如果T拥有自定义的drop函数，那么编译器仍然要T strictly outlive Foo。
+- 如果T没有自定义的drop函数，那么就不要求 T outlive Foo<T>。
 
 ** 语法代码例子
 #+begin_src rust
@@ -317,9 +420,34 @@ https://zhuanlan.zhihu.com/p/356091194
 ** 一个元素的Tuple
 语法是("single", ) 如果写成("single"), rustc会提示你去掉多余的(), 并且如果你想要Tuple,那么加个逗号。("single", )
 
+** tuple struct 可以当作构造函数
+https://rust-lang.github.io/rfcs/2302-tuple-struct-self-ctor.html#self-as-a-function-pointer   这个RFC定义的
+
+#+begin_src rust
+#![allow(unused)]
+fn main() {
+    enum Status {
+        Value(u32),
+        Stop,
+    }
+
+	// 因为 创建 Status::Value() 枚举成员 类似于 函数的调用，因此可以
+    let list_of_statuses: Vec<Status> =
+        (0u32..20)
+        .map(Status::Value)
+        .collect();
+        
+        
+    struct A(u32);
+    
+    let s = (0..5).map(A).collect::<Vec<_>>();
+}  
+#+end_src
 ** generic_associated_types
 
 如何将trait里面的associated type指定life time  https://rust-lang.github.io/rfcs/1598-generic_associated_types.html
+
+https://rust-lang.github.io/rfcs/0195-associated-items.html
 
 ** A new impl Trait (by davidkoloski)
 
@@ -327,13 +455,13 @@ https://davidkoloski.me/blog/a-new-impl-trait-1/
 提出了一些问题
 
 #+begin_src rust
-fn pick(which: bool, x: impl Debug, y: impl Debug) -> impl Debug {
-    if !which {
-        x
-    } else {
-        y
-    }
-}
+  fn pick(which: bool, x: impl Debug, y: impl Debug) -> impl Debug {
+      if !which {
+	  x
+      } else {
+	  y
+      }
+  }
 #+end_src
 
 是不行的，因为x,y可能是不同的类型。现在的impl Trait有2个缺陷，（A new impl Trait 4/4 ）
@@ -344,3 +472,368 @@ The largest obstacle for as impl Trait will be building consensus for either typ
 - 不可命名类型的命名 named unnameable types.
   
   
+** 管道发送函数闭包
+函数也可以发送到对面，然后执行。<<drop>>
+#+begin_src rust
+  pub fn with_channels() {
+      use std::sync::mpsc::channel;
+      use std::thread::spawn;
+      let (channel_send, channel_receive) = channel::<Box<dyn Fn() + Send>>();
+      let (send_done, receive_done) = channel::<()>();
+
+      spawn(move || loop {
+	  match channel_receive.recv() {
+	      Ok(r) => {
+		  r();
+	      }
+	      Err(_e) => {
+		  println!("done");
+		  send_done.send(()).unwrap();
+		  return;
+	      }
+	  }
+      });
+
+      (0..=5).for_each(move |i| {
+	  let ch = channel_send.clone(); //这里应该用不着clone,又不是在线程里发送。
+	  ch.send(Box::new(move || {
+	      println!("ch:{}", i);
+	  }))
+	      .unwrap();
+	  //对头，去掉ch,照样工作。
+	  drop(ch);
+      });
+      //按道理channel_send并没有drop掉，receive_done应该收不到东西。
+      receive_done.recv().ok();
+  }
+  fn main() {
+      with_channels();
+  }
+#+end_src
+
+#+RESULTS:
+: ch:0
+: ch:1
+: ch:2
+: ch:3
+: ch:4
+: ch:5
+: done
+
+recv_done 在等一条永远也不会到的消息吧？有人说for ch in iter::repeat(channel_send).take(5)
+就可以了。
+从运行结果上看'done'打印出来了。原因是for_each捕获了channel_send，所以它结束后，channel_send也结束了。
+https://zhuanlan.zhihu.com/p/456088807 回忆一下Rust消息通道关闭的两个条件：所有发送者全部被drop或接收者被drop，由于for循环还在使用接收者，因此后者条件无法被满足，那么只能发送者全部被drop，才能让例子中的消息通道关闭。
+** 泛型一例
+有人想写这样的程序：结果D是编译不过去的啦。
+
+#+begin_src rust
+  trait A<T>{}
+  trait B<X,T:A<X>>{}
+
+  struct C<X,Y:A<X>,T:B<X,Y>>{}
+  impl <X,Y:A<X>,T:B<X,Y>> C<X,Y,T>{}
+
+  struct D<T>{}
+  impl <X,Y:A<X>,T:B<X,Y>> D<T>{}
+
+  fn main() {
+      println!("Hello, world!");
+  }  
+#+end_src
+报错是说X 没有被impl trait，Self type或predicated “约束住”。
+- impl trait：确定一个具体的trait的时候X是个具体类型；（不过这里不是impl trait）
+- Self type：确定具体的Self时，X是个具体类型。
+- predicated：确定具体一个trait bound时，X是个具体类型。（比如说 i32: A<T = X>, X就确定下来了）
+
+就是：
+对于 impl<...> Type<...> 形式，impl<...>声明的泛型参数必须在 Type<...> 中全部出现。
+对于 impl<...> Trait<...> for Type<...> 形式， impl<...>声明的泛型参数必须在 Trait<...>和 Type<...> 中全部出现。
+
+impl<X, Y, T> D<T> 显然不符合。
+
+
+网友分析：
+他是这样写的：
+struct D<T>{}
+
+impl<X, Y:A<X>, T:B<X,Y>> D<T>{}
+
+其实他想表达的是：
+
+对于任何T的D<T>，在有一个X，Y，T 满足与X，Y相关的B约束，Y满足与X相关的A约束，的前提下，增加一些关联条目
+
+翻译过来不就是
+impl<T> D<T>,  exists <X, Y> where T:B<X,Y>, Y:A<X> {}
+这个赛季是没有这样的支持的，但是你可以手工收紧约束，比如把X，Y真正放在“存在”的位置上
+trait BFixed {
+type X;
+type Y;
+}
+
+impl<T> D<T>,  where T:BFixed, <T as BFixed>::Y:A<<T as BFixed>::X> {}
+诸如此类的
+
+也就是说，你给出了T=B<X,Y>， Y=A<X>，让编译器求X,Y的值，哪个有这么智能的？所以就出错不干了。
+
+#+begin_src rust
+  struct Z<T> (T);
+  impl <T,U> Z<T> where U:Clone {}
+  fn main() {}
+#+end_src
+同理，给出Z<T>, 编译器推导不出U来，虽然有个trait bound U:Clone。(因为没有和主体关联)
+只能是：
+#+begin_src rust
+  trait SomeTrait {
+      type X;
+  }
+  struct Z<T> (T);
+  impl <T,U> Z<T> where T:SomeTrait<X=U> {}
+  fn main() {}
+#+end_src
+这个就是predicate谓词，（T是主体）应该指的是SomeTrait<X=U>即trait bound。所以谓词应该定义为和主体想关联的那些trait bound.
+** 迷惑人的trait
+#+begin_src rust
+  use std::fmt::Display;
+
+  trait Foo {
+      type E;
+      fn as_E(&self) -> &Self::E;
+  }
+
+  impl<T: Display> Foo for T {
+      type E = T;
+      fn as_E(&self) -> &Self::E {
+	  self
+      }
+  }
+
+  /// because：
+  /// -> 函数 Trait Bound：U as Foo and <U as Foo>::E as Diplay
+  /// 因此，没有问题
+  fn bounded<U: Foo>(u: U) // true
+  where
+      U::E: Display,
+  {
+      // Here, we just constrain the associated type directly
+      println!("{}", u.as_E())
+  }
+
+  /// because：
+  /// -> 函数 Trait Bound：U as Display
+  /// -> U as Foo（因为 Foo 是对所有实现了 Display 的实现）
+  /// -> <U as Foo>::E = U
+  /// -> <U as Foo>::E as Display
+  /// 因此，没问题
+  fn blanket<U: Display>(u: U) { // true
+      // the blanket impl applies to U, so we know that `U: Foo` and
+      // <U as Foo>::E = U (and, of course, U: Show)
+      println!("{}", u.as_E())
+  }
+
+  /// because：
+  /// -> 函数 Trait Bound：U as Foo
+  /// -> 可以推断出 U as Display（因 mpl<T: Display> Foo for T）
+  /// -> <U as Foo>::T = U ？
+  /// 为什么此处无法得知 <U as Foo>::T = U
+  /// 而上面的 blanket 可以得到 <U as Foo>::T = U
+  fn not_allowed<U: Foo>(u: U) {
+      // this will not compile, since <U as Trait>::T is not known to
+      // implement Show
+      println!("{}", u.as_E())
+  }  
+#+end_src
+
+bounded函数非常迷惑人，他限定U:Foo, U::E:Display, 但是这个U::E:Display只是确保 *println!("{}", u.as_E())* 不出错，由于U!:Display,所以和U的Foo缺省实现毫无关系。也就是as_E()走的不是 *impl<T: Display> Foo for T* 这条路。
+
+blanket需要注意的是根据 **impl<T: Display> Foo for T** 这条路， 对所有的T都实现了Foo，只要T:Display. 所以这时候，U可以 as Foo的。
+
+not_allowed限定U:Foo，但是推导不出U:Display,所以不走 *impl<T: Display> Foo for T* 这条路。这条路仅仅是给T:Display的人走的。代码中的注释是错误的，并且上面的 blanket 并没有得到 <U as Foo>::E = U
+
+** trait bound 还可以这样
+where &'a Self: IterableOwned, 这里的 'a 可以删除吧？（不行，直接报错。 explicit lifetime name needed here）
+- Self: IterableOwned 和 &Self: IterableOwned 是完全不同的概念，因为可以让 Self 没实现 IterableOwned 的情况下，让  &Self 实现 IterableOwned
+
+- &'a Self::I 是 Self::I 的引用，而不是你要的 <&Self as IterableOwned>::I
+
+- Self::I 不一定就是 <Self as IterableOwned>::I 这个的关联类型，也可能是 Self 实现的其他 Trait 的关联类型
+
+#+begin_src rust
+
+  fn main() {
+      let s = &[1, 2, 3][..];
+      for i in <[u8] as Iterable>::iter(s) {
+	  dbg!(i);
+      }
+      for i in <&[u8] as IterableOwned>::iter_owned(s) {
+	  dbg!(i);
+      }
+  }
+
+  trait IterableOwned {
+      type A;
+      type I: Iterator<Item = Self::A>;
+      fn iter_owned(self) -> Self::I;
+  }
+
+  trait Iterable {
+      fn iter<'a>(&'a self) -> <&'a Self as IterableOwned>::I
+      where
+	  &'a Self: IterableOwned,
+      {
+	  IterableOwned::iter_owned(self)
+      }
+  }
+
+  impl<'a> IterableOwned for &'a [u8] {
+      type A = &'a u8;
+      type I = std::slice::Iter<'a, u8>;
+      fn iter_owned(self) -> Self::I {
+	  self.iter()
+      }
+  }
+
+  impl Iterable for [u8] {}
+
+#+end_src
+
+*** 
+
+* Unsafe Rust 随堂小测
+https://zhuanlan.zhihu.com/p/532496013
+
+   1. 以下 bytes_of 函数为什么是不健全(unsound)的？（30分）
+      #+begin_src rust
+	pub fn bytes_of<T>(val: &T) -> &[u8] {
+	    let len: usize = core::mem::size_of::<T>();
+	    let data: *const u8 = <*const T>::cast(val);
+	    unsafe { core::slice::from_raw_parts(data, len) }
+	}  
+      #+end_src
+      概念：引用，内存布局，未初始化内存，内部可变性。
+      #+begin_center
+      得分点 （3 * 10分）：
+
+      当 T 的内存布局中含有对齐时，用于对齐的字节可能未初始化。
+      当 T 具有内部可变性时，&T 无法保证所指向的内存不变。
+      当 T 是 union 时（例如 MaybeUninit），&T 所指向的内存可能有一部分未初始化。
+      以上三点会违反 slice::from_raw_parts 的安全约束。
+
+      本题原型是 bytemuck 中的 bytes_of 函数。
+      #+end_center
+
+   1. 以下 Memory trait 的 as_bytes 方法为什么是不健全的？（10分） 请提出至少两种修复方案，使该 trait 健全。(20分)
+      #+begin_src rust
+	pub trait Memory {
+	    fn addr(&self) -> *const u8;
+
+	    fn length(&self) -> usize;
+
+	    /// !!!unsound!!!
+	    fn as_bytes(&self) -> &[u8] {
+		let data: *const u8 = self.addr();
+		let len: usize = self.length();
+		unsafe { core::slice::from_raw_parts(data, len) }
+	    }
+	}  
+      #+end_src
+      概念：trust 问题
+      #+begin_center
+      得分点（1 * 10分）：Memory trait 是 safe trait，其中的方法都是 safe 方法，其他类型可以轻易写出错误的实现，因此 as_bytes 方法中无法保证 addr 和 length 有效，可能触发 UB。
+
+      得分点（2 * 10分）：一种修复方案是把 Memory trait 标记成 unsafe trait，另一种修复方案是把 as_bytes 方法标记成 unsafe fn。其他方案只要合理均可得分。   
+      #+end_center
+   1. 以下 alloc_for 函数为什么是不健全的？（10分） 请写出修复方案，不能改变函数签名。（10分）
+      #+begin_src rust
+	/// !!!unsound!!!
+	pub fn alloc_for<T>() -> *mut u8 {
+	    let layout = std::alloc::Layout::new::<T>();
+	    unsafe { std::alloc::alloc(layout) }
+	}  
+      #+end_src
+   1. 以下 read_to_vec 函数为什么是不健全的？（10分）。 请写出修复方案，不能改变函数签名。（10分）
+      #+begin_src rust
+	use std::io;
+
+	/// !!!unsound!!!
+	pub fn read_to_vec<R>(mut reader: R, expected: usize) -> io::Result<Vec<u8>>
+	where
+	    R: io::Read,
+	{
+	    let mut buf: Vec<u8> = Vec::new();
+	    buf.reserve_exact(expected);
+	    unsafe { buf.set_len(expected) };
+	    reader.read_exact(&mut buf)?;
+	    Ok(buf)
+	}  
+      #+end_src
+      概念：分配器，零大小类型
+      #+begin_center
+      得分点（1 * 10分）：全局分配器不接受分配零大小的内存，当 T 为零大小类型时可能触发 UB。
+
+      得分点（1 * 10分）：修复方案可以是返回空指针、触发 panic/abort、返回特殊地址作为指针。其他方案只要合理均可得分。
+
+      零大小类型与全局分配器是一对经典冤家，我相信不少人都会忘记这里需要特判。
+
+      #+end_center
+   1. 以下 read_to_vec 函数为什么是不健全的？（10分）。 请写出修复方案，不能改变函数签名。（10分）
+      #+begin_src rust
+	use std::io;
+
+	/// !!!unsound!!!
+	pub fn read_to_vec<R>(mut reader: R, expected: usize) -> io::Result<Vec<u8>>
+	where
+	    R: io::Read,
+	{
+	    let mut buf: Vec<u8> = Vec::new();
+	    buf.reserve_exact(expected);
+	    unsafe { buf.set_len(expected) };
+	    reader.read_exact(&mut buf)?;
+	    Ok(buf)
+	}
+      #+end_src
+      概念：引用，未初始化内存
+      #+begin_verse
+      得分点（1 * 10分）：read_exact 接受 &mut [u8]，它要求缓冲区内存已初始化，而连续的 reserve 和 set_len 把未初始化的内存暴露了出来。这两个条件一结合就是立即 UB。
+
+      得分点（1 * 10分）：修复也很简单，用零初始化的 Vec 即可。另一种方案是用 Rust RFC 2930 的 ReadBuf。
+      #+end_verse
+      
+      #+begin_src rust
+	use std::io;
+
+	pub fn read_to_vec<R>(mut reader: R, expected: usize) -> io::Result<Vec<u8>>
+	where
+	    R: io::Read,
+	{
+	    let mut buf: Vec<u8> = vec![0; expected];
+	    reader.read_exact(&mut buf)?;
+	    Ok(buf)
+	}
+      #+end_src
+
+   1. as_uninit_mut 函数为什么是不健全(unsound)的？（10分）
+      #+begin_src rust
+	use core::mem::MaybeUninit;
+
+	/// !!!unsound!!!
+	pub fn as_uninit_mut<T>(s: &mut [T]) -> &mut [MaybeUninit<T>] {
+	    let data: *mut MaybeUninit<T> = s.as_mut_ptr().cast();
+	    let len = s.len();
+	    unsafe { core::slice::from_raw_parts_mut(data, len) }
+	}
+      #+end_src
+      概念：未初始化内存，类型安全
+      
+      #+begin_verse
+      得分点（1 * 10分）：把 &mut [T] 转换为 &mut [MaybeUninit<T>] 之后，其中的 T 可以被替换成任意内存，导致 UB。
+
+      let mut s: Vec<Vec<u32>> = vec![vec![1]];
+      let u = as_uninit_mut(&mut s);
+      u[0] = MaybeUninit::zeroed();
+
+      其实这题用型变可以直接看出来，把 T 当作 MaybeUninit<T> 的子类型(subtype)，而 &'a mut T 对 T 不变，所以类型转换显然是不安全的。
+      #+end_verse
+
+
+
