@@ -18,6 +18,7 @@ https://rsproxy.cn
 ** 配置
 crates.io 镜像配置编辑 ~/.cargo/config:
 
+#+begin_verse
 [source.crates-io]
 replace-with = 'rsproxy'
 [source.rsproxy]
@@ -28,16 +29,22 @@ registry = "sparse+https://rsproxy.cn/index/"
 index = "https://rsproxy.cn/crates.io-index"
 [net]
 git-fetch-with-cli = true
+#+end_verse
+
 
 ** Rustup 镜像配置
 将下面的环境变量配置到您的 Shell rc 文件中（如 ~/.zshrc, ~/.bashrc 等，取决于您当前使用的 shell）。
+#+begin_src shell
 export RUSTUP_DIST_SERVER="https://rsproxy.cn"
 export RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
+#+end_src
 
 ** 安装 Rust：
+#+begin_src shell
 curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh | sh
+#+end_src
 
-使用 Sparse Index
+** 使用 Sparse Index
 默认情况下，cargo 会使用基于 Git 的 index（也是前面的默认配置）。但是随着 index 体积增大，利用 git 拉取全量 index 逐渐变得缓慢。这个 issue 跟踪了正在进行中的 Sparse Index 的进展。目前该功能在 nightly 版本下已可用。
 RsProxy 支持了该功能(@2022-07-13)。
 用户需要做 3 件小事：
@@ -45,7 +52,9 @@ RsProxy 支持了该功能(@2022-07-13)。
 2. 配置环境变量 CARGO_UNSTABLE_SPARSE_REGISTRY=true
 3. ~/.cargo/config 中使用 replace-with = 'rsproxy-sparse'
 
+#+begin_quote
 Tips: 刚刚配置完需要应用 ~/.zshrc 等文件中的环境变量，vscode 需重开一下。
+#+end_quote
 
 ** 功能对齐状态
 目前支持以下几种请求：
@@ -698,6 +707,42 @@ where &'a Self: IterableOwned, 这里的 'a 可以删除吧？（不行，直接
 #+end_src
 
 *** 
+
+** Asynchronous Closures in Rust - Box and Pin
+https://www.bitfalter.com/async-closures
+
+** 开眼界 async_trait
+#+begin_src rust
+use std::future::Future;
+use async_trait::async_trait;
+
+#[async_trait]
+pub trait Executor: Send + Sync + 'static {
+    async fn execute(&self, data: String);
+}
+
+pub struct FnWrapper<F>(pub F);
+
+
+#[async_trait]
+impl<F, Fut> Executor for FnWrapper<F>
+where 
+    F: Fn(String) -> Fut + Sync + Send + 'static,
+    Fut: Future<Output=()> + Send {
+    async fn execute(&self, data: String) {
+        self.0(data).await;
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    let data = "abc".to_string();
+    let fw = FnWrapper(|d:String|async move{
+        println!("======data: {}", d);
+    });
+    fw.execute(data).await;
+}  
+#+end_src
 
 * Unsafe Rust 随堂小测
 https://zhuanlan.zhihu.com/p/532496013
